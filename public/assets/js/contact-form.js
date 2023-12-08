@@ -60,6 +60,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const messageElement = document.getElementById(elementID);
     messageElement.textContent = message;
     messageElement.className = className;
-    setTimeout(() => messageElement.textContent = '', 3000); // Clear message after 3 seconds
+    setTimeout(() => messageElement.textContent = '', 10000); // Clear message after 3 seconds
   }
 });

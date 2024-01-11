@@ -1,0 +1,10 @@
+id,title,category,client,date,url,image
+1,"Project One","Web Design","ASU Company","01 March, 2020","www.example-one.com","portfolio-1.jpg"
+2,"Project Two","App Development","XYZ Corp","15 April, 2020","www.example-two.com","portfolio-2.jpg"
+3,"Project Three","Graphic Design","ABC Inc","30 June, 2020","www.example-three.com","portfolio-3.jpg"
+4,"Project Four","Web Design","DEF Ltd","22 July, 2020","www.example-four.com","portfolio-4.jpg"
+5,"Project Five","App Development","GHI Organization","12 August, 2020","www.example-five.com","portfolio-5.jpg"
+6,"Project Six","Graphic Design","JKL Enterprise","05 September, 2020","www.example-six.com","portfolio-6.jpg"
+7,"Project Seven","Web Design","MNO Company","20 October, 2020","www.example-seven.com","portfolio-7.jpg"
+8,"Project Eight","App Development","PQR Studios","15 November, 2020","www.example-eight.com","portfolio-8.jpg"
+9,"Project Nine","Graphic Design","STU Group","01 December, 2020","www.example-nine.com","portfolio-9.jpg"

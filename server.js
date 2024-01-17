@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
-const { parse } = require('csv-parse/sync');
+// const { parse } = require('csv-parse/sync');
 require('dotenv').config();
 
 const app = express();
@@ -42,36 +42,36 @@ app.post('/send-email', (req, res) => {
     });
 });
 
-// Endpoint to get all portfolio items
-app.get('/api/portfolio', (req, res) => {
-    try {
-        const fileContent = fs.readFileSync(path.join(__dirname, 'public/assets/docs/portfolio.csv'));
-        const records = parse(fileContent, { columns: true });
-        res.json(records);
-    } catch (error) {
-        console.error(error);
-        res.status(500).send('Error reading portfolio data');
-    }
-});
+// // Endpoint to get all portfolio items
+// app.get('/api/portfolio', (req, res) => {
+//     try {
+//         const fileContent = fs.readFileSync(path.join(__dirname, 'public/assets/docs/portfolio.csv'));
+//         const records = parse(fileContent, { columns: true });
+//         res.json(records);
+//     } catch (error) {
+//         console.error(error);
+//         res.status(500).send('Error reading portfolio data');
+//     }
+// });
 
-// Endpoint to get a specific portfolio item by ID
-app.get('/api/portfolio/:id', (req, res) => {
-    try {
-        const id = req.params.id;
-        const fileContent = fs.readFileSync(path.join(__dirname, 'public/assets/docs/portfolio.csv'));
-        const records = parse(fileContent, { columns: true });
-        const portfolioItem = records.find(item => item.id === id);
+// // Endpoint to get a specific portfolio item by ID
+// app.get('/api/portfolio/:id', (req, res) => {
+//     try {
+//         const id = req.params.id;
+//         const fileContent = fs.readFileSync(path.join(__dirname, 'public/assets/docs/portfolio.csv'));
+//         const records = parse(fileContent, { columns: true });
+//         const portfolioItem = records.find(item => item.id === id);
 
-        if (portfolioItem) {
-            res.json(portfolioItem);
-        } else {
-            res.status(404).send('Item not found');
-        }
-    } catch (error) {
-        console.error(error);
-        res.status(500).send('Error processing request');
-    }
-});
+//         if (portfolioItem) {
+//             res.json(portfolioItem);
+//         } else {
+//             res.status(404).send('Item not found');
+//         }
+//     } catch (error) {
+//         console.error(error);
+//         res.status(500).send('Error processing request');
+//     }
+// });
 
 app.listen(3003, () => {
     console.log('Server is running on port 3003');

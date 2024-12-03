@@ -45,6 +45,10 @@ a:hover {
   text-decoration: none;
 }
 
+p{
+  text-align: justify;
+}
+
 h1,
 h2,
 h3,
@@ -416,6 +420,10 @@ section .container {
   font-weight: 700;
   font-size: 26px;
   color: #18d26e;
+}
+
+.about-me .content p {
+  text-align: justify;
 }
 
 .about-me .content ul {

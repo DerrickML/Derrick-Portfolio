@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
+const fetch = require('node-fetch');
 // const { parse } = require('csv-parse/sync');
 require('dotenv').config();
 
@@ -11,6 +12,46 @@ const app = express();
 app.use(express.static('public'));
 
 app.use(express.json());
+
+// Add this near the top of your server.js file
+const testimonialsData = [
+    {
+        quote: "Proin iaculis purus consequat sem cure digni ssim donec porttitora entum suscipit rhoncus...",
+        image: "assets/img/testimonials/testimonials-1.jpg",
+        name: "Saul Goodman",
+        title: "CEO & Founder"
+    },
+    {
+        quote: "Export tempor illum tamen malis malis eram quae irure esse labore quem cillum quid cillum eram malis...",
+        image: "assets/img/testimonials/testimonials-2.jpg",
+        name: "Sara Wilsson",
+        title: "Designer"
+    },
+    // Add more testimonials as needed
+];
+
+// Add this route to serve the testimonials data
+app.get('/api/testimonials', async (req, res) => {
+    try {
+        const response = await fetch('https://script.google.com/macros/s/AKfycbyNpfflHQUWQ1TzMOEu5S28L23X-KogevFd1K201jzjD_pHUeTIqm0kjegRyACGq-FreA/exec');
+        const data = await response.json();
+        console.log(data)
+        
+        // Map the data to match your frontend structure
+        const testimonials = data.map(item => ({
+            quote: item['Testimonial Quote'],
+            name: item['Full Name'],
+            title: item['Position/Title'],
+            image: 'assets/img/testimonials/placeholder.png' // Use a placeholder image
+        }));
+        
+        res.json(testimonials);
+    } catch (error) {
+        console.error('Error fetching testimonials:', error);
+        res.status(500).send('Error fetching testimonials');
+    }
+});
+
 
 // Define the route for the email sending functionality
 app.post('/send-email', (req, res) => {
@@ -42,37 +83,7 @@ app.post('/send-email', (req, res) => {
     });
 });
 
-// // Endpoint to get all portfolio items
-// app.get('/api/portfolio', (req, res) => {
-//     try {
-//         const fileContent = fs.readFileSync(path.join(__dirname, 'public/assets/docs/portfolio.csv'));
-//         const records = parse(fileContent, { columns: true });
-//         res.json(records);
-//     } catch (error) {
-//         console.error(error);
-//         res.status(500).send('Error reading portfolio data');
-//     }
-// });
-
-// // Endpoint to get a specific portfolio item by ID
-// app.get('/api/portfolio/:id', (req, res) => {
-//     try {
-//         const id = req.params.id;
-//         const fileContent = fs.readFileSync(path.join(__dirname, 'public/assets/docs/portfolio.csv'));
-//         const records = parse(fileContent, { columns: true });
-//         const portfolioItem = records.find(item => item.id === id);
-
-//         if (portfolioItem) {
-//             res.json(portfolioItem);
-//         } else {
-//             res.status(404).send('Item not found');
-//         }
-//     } catch (error) {
-//         console.error(error);
-//         res.status(500).send('Error processing request');
-//     }
-// });
-
 app.listen(3003, () => {
     console.log('Server is running on port 3003');
 });
+

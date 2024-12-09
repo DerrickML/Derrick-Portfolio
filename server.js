@@ -3,8 +3,11 @@ const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
 const fetch = require('node-fetch');
+const moment = require('moment-timezone');
 // const { parse } = require('csv-parse/sync');
 require('dotenv').config();
+
+moment.tz.setDefault('Africa/Nairobi'); // East Africa Time
 
 const app = express();
 
@@ -30,6 +33,124 @@ const testimonialsData = [
     // Add more testimonials as needed
 ];
 
+/*======PRIVATE=====*/
+//DOGS
+// Path to members.json
+const MEMBERS_FILE = path.join(__dirname, 'data', 'members.json');
+
+function readMembers() {
+    const data = fs.readFileSync(MEMBERS_FILE, 'utf8');
+    return JSON.parse(data);
+}
+
+function writeMembers(members) {
+    fs.writeFileSync(MEMBERS_FILE, JSON.stringify(members, null, 2), 'utf8');
+}
+
+function generateSchedule(members, daysToGenerate = 7) {
+    const today = moment().startOf('day');
+
+    // Initialize lastOpenedDate for sorting:
+    members.forEach(m => {
+        m.lastOpenedDate = m.lastOpened ? moment(m.lastOpened) : moment().subtract(1, 'year');
+    });
+
+    // Sort by oldest lastOpened first (older date = smaller/earlier = negative diff)
+    members.sort((a, b) => {
+        const diff = a.lastOpenedDate.diff(b.lastOpenedDate);
+        if (diff !== 0) return diff;
+        return a.name.localeCompare(b.name);
+    });
+    
+    let schedule = [];
+
+    for (let i = 0; i < daysToGenerate; i++) {
+        const day = moment(today).add(i, 'days');
+        let assigned = false;
+
+        // Pick the first available member (after sorting by lastOpened)
+        for (let member of members) {
+            if (member.available) {
+                // Assign this member for the current day
+                schedule.push({
+                    date: day.format('YYYY-MM-DD'),
+                    person: member.name
+                });
+                member.lastOpened = day.format(); 
+                member.nextOpenDay = day.format('YYYY-MM-DD');
+                assigned = true;
+                break;
+            }
+        }
+
+        // If nobody was available, record that
+        if (!assigned) {
+            schedule.push({
+                date: day.format('YYYY-MM-DD'),
+                person: 'No one available'
+            });
+        }
+
+        // Recompute lastOpenedDate and re-sort for the next day’s assignment
+        members.forEach(m => {
+            m.lastOpenedDate = m.lastOpened ? moment(m.lastOpened) : moment().subtract(1, 'year');
+        });
+        members.sort((a, b) => a.lastOpenedDate.diff(b.lastOpenedDate));
+    }
+
+    return schedule;
+}
+//==== END DOGS
+/*======END PRIVATE=====*/
+
+/**
+ * ROUTES
+ */
+//===== DOGS
+// Endpoint to get the current schedule
+// Endpoint to get members data
+app.get('/api/members', (req, res) => {
+    const members = readMembers();
+    res.json(members);
+});
+// After updating a member’s availability:
+app.post('/api/updateAvailability', (req, res) => {
+    const { name, available } = req.body;
+    if (!name || typeof available !== 'boolean') {
+        return res.status(400).json({ error: 'Invalid data' });
+    }
+
+    let members = readMembers();
+    const member = members.find(m => m.name === name);
+    if (!member) {
+        return res.status(404).json({ error: 'Member not found' });
+    }
+
+    member.available = available;
+    writeMembers(members);
+
+    // Recalculate schedule immediately after change
+    const days = 7;
+    const schedule = generateSchedule(members, days);
+    writeMembers(members); // persist new lastOpened, nextOpenDay
+
+    // Optionally store schedule in memory or a separate file
+    fs.writeFileSync(path.join(__dirname, 'data', 'schedule.json'), JSON.stringify(schedule, null, 2));
+
+    res.json({ success: true, schedule, members });
+});
+
+// Serve the stored schedule
+app.get('/api/schedule', (req, res) => {
+    let members = readMembers();
+    const days = 7;
+    const schedule = generateSchedule(members, days);
+    writeMembers(members); // persist updated lastOpened
+    res.json({ schedule });
+});
+//===== END DOGS
+
+//===== PORTFOLIO
 // Add this route to serve the testimonials data
 app.get('/api/testimonials', async (req, res) => {
     try {
@@ -82,6 +203,7 @@ app.post('/send-email', (req, res) => {
         }
     });
 });
+//==== END PORTFOLIO
 
 app.listen(3003, () => {
     console.log('Server is running on port 3003');

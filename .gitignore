@@ -4,3 +4,7 @@ package-lock.json
 stderr.log
 tmp/
 public/games/
+### PRIVATE
+# DOGS
+data/members.json
+public/private/dogs/

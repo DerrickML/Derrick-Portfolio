@@ -34,7 +34,8 @@ document.addEventListener('DOMContentLoaded', function() {
             delay: 5000,
             disableOnInteraction: false,
           },
-          slidesPerView: 'auto',
+          // slidesPerView: 'auto',
+          slidesPerView: 1,
           pagination: {
             el: '.swiper-pagination',
             type: 'bullets',
@@ -46,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
               spaceBetween: 20
             },
             1200: {
-              slidesPerView: 3,
+              slidesPerView: 1,
               spaceBetween: 20
             }
           }

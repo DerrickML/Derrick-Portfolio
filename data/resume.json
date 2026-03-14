@@ -6,8 +6,8 @@
   "experience": [
     {
       "title": "Principal Systems Lead",
-      "organization": "National Renewable Energy Platform (NREP), Ministry of Energy & Mineral Development, Uganda",
       "period": "Aug 2024 - Present",
+      "organization": "National Renewable Energy Platform (NREP), Ministry of Energy & Mineral Development, Uganda",
       "bullets": [
         "Oversee operational and strategic facets of IT infrastructure, ensuring robust and secure systems aligned with NREP's mission to promote renewable energy.",
         "Drive innovation by introducing new technologies and solutions that enhance efficiency and effectiveness.",
@@ -17,9 +17,9 @@
       ]
     },
     {
-      "title": "Application Developer",
-      "organization": "Crownzcom Ltd",
+      "title": "Software Engineer",
       "period": "Jul 2023 - Aug 2024",
+      "organization": "Crownzcom Ltd",
       "bullets": [
         "Designed and implemented server-side architecture and APIs for various applications.",
         "Developed and integrated databases to ensure robust data storage and retrieval systems.",
@@ -31,8 +31,8 @@
     },
     {
       "title": "Volunteer - IT/System Support",
-      "organization": "National Renewable Energy Platform (NREP), Ministry of Energy & Mineral Development, Uganda",
       "period": "Mar 2022 - Jul 2023",
+      "organization": "National Renewable Energy Platform (NREP), Ministry of Energy & Mineral Development, Uganda",
       "bullets": [
         "Managed and maintained IT infrastructure and systems, ensuring smooth daily operations.",
         "Enhanced system utilization by providing comprehensive training and support to staff.",
@@ -43,8 +43,8 @@
     },
     {
       "title": "Team Lead - AgriOT Team",
-      "organization": "UN-World Food Program NextGen-Innovation, DTU SkyLab-FoodLab",
       "period": "Feb 2021 - Dec 2021",
+      "organization": "UN-World Food Program NextGen-Innovation, DTU SkyLab-FoodLab",
       "bullets": [
         "Led a team of 5 during the NextGen-Innovation program in partnership with DTU SkyLab FoodLab and the Denmark Ministry of Foreign Affairs.",
         "Developed an automated SMART IoT-based vanilla storage system controllable remotely.",
@@ -55,8 +55,8 @@
     },
     {
       "title": "Student Intern",
-      "organization": "Parliament of the Republic of Uganda",
       "period": "May 2019 - Aug 2019",
+      "organization": "Parliament of the Republic of Uganda",
       "bullets": [
         "Supported the ICT Department in ensuring proper functioning of hardware and software.",
         "Contributed to department reorganization and received commendations for high service standards.",
@@ -68,54 +68,54 @@
   "education": [
     {
       "title": "Master of Computer Applications in Computer Science & IT (Distinction)",
-      "institution": "JAIN (Deemed-to-be University), Bengaluru, India",
       "period": "2022 - 2024 | CGPA 9.23/10.00",
+      "institution": "JAIN (Deemed-to-be University), Bengaluru, India",
       "description": "Completed a Master's degree with distinction, enhancing extensive knowledge and skills in computer science and information technology."
     },
     {
       "title": "Bachelor of Science in Computer Science (Hons.)",
-      "institution": "Makerere University, Kampala, Uganda",
       "period": "2017 - 2021 | CGPA 3.57/5.00",
+      "institution": "Makerere University, Kampala, Uganda",
       "description": "Completed undergraduate studies, laying a strong foundation in computer science."
     }
   ],
   "certifications": [
     {
       "title": "ALX Software Engineering Certification (Backend Specialization)",
-      "institution": "ALX Africa",
       "period": "03/2022 - 03/2023",
+      "institution": "ALX Africa",
       "description": "Completed an intensive 1-year software engineering course covering foundations, backend development, and frontend development, with a focus on backend specialization."
     },
     {
       "title": "Certificate Course in Statistical Data Analysis",
-      "institution": "Kyambogo University & Hitech Systems Training School",
       "period": "03/2017 - 04/2017",
+      "institution": "Kyambogo University & Hitech Systems Training School",
       "description": "Successfully completed a course covering statistical analysis tools: SPSS, Epidata, Stata, EViews, enhancing data analysis capabilities."
     }
   ],
   "honors": [
     {
-      "title": "\"i-Learn\" Scholarship Awardee under the e-VBAB Project",
-      "institution": "Ministry of External Affairs (MEA), Government of India",
+      "title": "e-VBAB (e-VidyaBharati and e-AarogyaBharati) Project Scholarship",
       "period": "2022",
+      "institution": "Ministry of External Affairs (MEA), Government of India",
       "description": "Received a 100% scholarship to pursue a Master's degree at JAIN University, awarded for academic excellence and potential."
     },
     {
       "title": "Hult Prize Regional Competition - Second Runners-up",
-      "institution": "Hult Prize Foundation - Nairobi, Kenya",
       "period": "04/2021",
+      "institution": "Hult Prize Foundation - Nairobi, Kenya",
       "description": "Emerged as the second runners-up representing Makerere University under the theme \"Food for Good.\""
     },
     {
       "title": "UN-World Food Program NextGen-Innovation - Top 3 Teams",
-      "institution": "United Nations World Food Program & Technical University of Denmark",
       "period": "03/2021",
+      "institution": "United Nations World Food Program & Technical University of Denmark",
       "description": "Ranked among the top 3 teams out of 9 in the bootcamp, showcasing innovative solutions to address food-related challenges."
     },
     {
       "title": "Hult Prize OnCampus Competition Winners",
-      "institution": "Hult Prize Foundation - Makerere University Kampala",
       "period": "12/2020",
+      "institution": "Hult Prize Foundation - Makerere University Kampala",
       "description": "Won the on-campus competition at Makerere University under the theme \"Food for Good.\""
     }
   ],

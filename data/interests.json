@@ -1,0 +1,8 @@
+[
+  { "name": "Chess", "icon": "ri-store-line", "color": "#ffbb2c" },
+  { "name": "Coding", "icon": "ri-bar-chart-box-line", "color": "#5578ff" },
+  { "name": "Sci-Fi", "icon": "ri-calendar-todo-line", "color": "#e80368" },
+  { "name": "Pop & Alt-Pop Music", "icon": "ri-paint-brush-line", "color": "#e361ff" },
+  { "name": "Catching up with Tech trends", "icon": "ri-database-2-line", "color": "#47aeff" },
+  { "name": "Understanding the Universe", "icon": "ri-gradienter-line", "color": "#ffa76e" }
+]

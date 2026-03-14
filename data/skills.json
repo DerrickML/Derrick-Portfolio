@@ -1,0 +1,42 @@
+[
+  {
+    "name": "HTML",
+    "percentage": 100
+  },
+  {
+    "name": "CSS",
+    "percentage": 90
+  },
+  {
+    "name": "JavaScript",
+    "percentage": 87
+  },
+  {
+    "name": "NodeJS",
+    "percentage": 89
+  },
+  {
+    "name": "PHP",
+    "percentage": 75
+  },
+  {
+    "name": "WordPress/CMS",
+    "percentage": 85
+  },
+  {
+    "name": "C/C++",
+    "percentage": 85
+  },
+  {
+    "name": "Arduino",
+    "percentage": 100
+  },
+  {
+    "name": "Python",
+    "percentage": 80
+  },
+  {
+    "name": "RaspBerry Pi",
+    "percentage": 80
+  }
+]

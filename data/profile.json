@@ -1,0 +1,25 @@
+{
+  "name": "Derrick L. Mayiku",
+  "fullName": "Derrick Locha Mayiku",
+  "tagline": "Innovating at the <span>Crossroads</span> of Technology, and Sustainability. Empowering solutions for a smarter, greener, and connected world.",
+  "aboutTitle": "A Full-Stack Software Engineer, and an AIoT Enthusiast",
+  "aboutText": "I am a dedicated and innovative Software Engineer specializing in full-stack development and systems engineering. I hold a Master's degree in Computer Applications (Distinction) from JAIN University, awarded under the prestigious \"i-Learn\" Scholarship by the MEA under the e-VBAB Project. Currently, I serve as the Systems Principal Lead at the <a href=\"https://nrep.ug\" target=\"_blank\">National Renewable Energy Platform (NREP)</a>, where I oversee IT infrastructure to promote renewable energy initiatives. Passionate about Artificial Intelligence (AI) and the Internet of Things (IoT), I actively explore these areas through research and projects, aiming to integrate them into future innovations to drive global impact in sustainability and technology.",
+  "profileImage": "assets/img/me-5-t.png",
+  "details": [
+    { "label": "Birthday", "value": "26<sup>th</sup> November" },
+    { "label": "Phone", "value": "+256 774 546556" },
+    { "label": "City", "value": "Kampala, Uganda" },
+    { "label": "Full Name", "value": "Derrick Locha Mayiku" },
+    { "label": "Degree", "value": "MCA - Computer Science & IT (Distinction) | BSc Computer Science" },
+    { "label": "Email", "value": "<a href=\"mailto:d.maiku@derrickml.com\">d.maiku@derrickml.com</a> | <a href=\"mailto:derrickmaiku@gmail.com\">derrickmaiku@gmail.com</a>" }
+  ],
+  "socialLinks": [
+    { "platform": "twitter", "url": "https://x.com/mayikuderrick", "icon": "bi bi-twitter" },
+    { "platform": "linkedin", "url": "https://www.linkedin.com/in/derrick-l-mayiku/", "icon": "bi bi-linkedin" }
+  ],
+  "meta": {
+    "title": "Derrick L. Mayiku",
+    "description": "Derrick Locha Mayiku is a Software Engineer and Systems Principal Lead specializing in full-stack development, AI, and IoT. Explore his portfolio, resume, and projects in renewable energy and technology innovation.",
+    "keywords": "Derrick Locha Mayiku, Software Engineer, Systems Principal Lead, Full-Stack Developer, AI, Artificial Intelligence, IoT, Internet of Things, Renewable Energy, NREP, Uganda, Portfolio, Resume"
+  }
+}

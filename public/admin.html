@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portfolio Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0b0e14;
+      --bg-card: #141822;
+      --bg-input: #1a1f2e;
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --border: #1e293b;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg-dark);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      margin: 0; min-height: 100vh;
+    }
+    /* LOGIN */
+    .login-wrapper {
+      display: flex; justify-content: center; align-items: center;
+      min-height: 100vh; padding: 1rem;
+    }
+    .login-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 2.5rem; width: 100%; max-width: 400px;
+      box-shadow: 0 20px 50px rgba(0,0,0,.4);
+    }
+    .login-card h1 { font-size: 1.5rem; margin-bottom: .5rem; }
+    .login-card .subtitle { color: var(--text-muted); font-size: .875rem; margin-bottom: 2rem; }
+    /* DASHBOARD */
+    .dashboard { display: none; }
+    .sidebar {
+      position: fixed; left: 0; top: 0; bottom: 0; width: 240px;
+      background: var(--bg-card); border-right: 1px solid var(--border);
+      padding: 1.5rem 0; overflow-y: auto; z-index: 10;
+    }
+    .sidebar .brand {
+      padding: 0 1.25rem 1.5rem; border-bottom: 1px solid var(--border);
+      margin-bottom: 1rem;
+    }
+    .sidebar .brand h2 { font-size: 1.1rem; margin: 0; }
+    .sidebar .brand small { color: var(--text-muted); font-size: .75rem; }
+    .sidebar-nav { list-style: none; padding: 0; margin: 0; }
+    .sidebar-nav li a {
+      display: flex; align-items: center; gap: .75rem;
+      padding: .75rem 1.25rem; color: var(--text-muted);
+      text-decoration: none; font-size: .9rem; transition: all .2s;
+      border-left: 3px solid transparent;
+    }
+    .sidebar-nav li a:hover, .sidebar-nav li a.active {
+      color: var(--accent); background: rgba(16,185,129,.06);
+      border-left-color: var(--accent);
+    }
+    .sidebar-nav li a i { font-size: 1.1rem; width: 20px; text-align: center; }
+    .main-content { margin-left: 240px; padding: 2rem; max-width: 960px; }
+    .topbar {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 2rem;
+    }
+    .topbar h1 { font-size: 1.5rem; margin: 0; }
+    /* EDITOR CARDS */
+    .editor-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem;
+    }
+    .editor-card h3 {
+      font-size: 1rem; color: var(--accent); margin-bottom: 1rem;
+      padding-bottom: .5rem; border-bottom: 1px solid var(--border);
+    }
+    /* FORM STYLES */
+    .form-control, .form-select {
+      background: var(--bg-input) !important; border: 1px solid var(--border) !important;
+      color: var(--text) !important; font-size: .875rem;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: var(--accent) !important;
+      box-shadow: 0 0 0 2px rgba(16,185,129,.15) !important;
+    }
+    .form-control::placeholder { color: var(--text-muted) !important; }
+    .form-label { font-size: .8rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: .5px; }
+    textarea.form-control { min-height: 80px; }
+    /* BUTTONS */
+    .btn-accent {
+      background: var(--accent); border: none; color: #fff;
+      font-weight: 600; padding: .6rem 1.5rem; border-radius: 8px;
+      transition: all .2s;
+    }
+    .btn-accent:hover { background: var(--accent-hover); color: #fff; }
+    .btn-outline-accent {
+      border: 1px solid var(--accent); color: var(--accent);
+      background: transparent; border-radius: 8px; padding: .4rem .75rem;
+      font-size: .8rem; transition: all .2s;
+    }
+    .btn-outline-accent:hover { background: var(--accent); color: #fff; }
+    .btn-outline-danger {
+      border: 1px solid var(--danger); color: var(--danger);
+      background: transparent; border-radius: 6px; padding: .25rem .5rem;
+      font-size: .75rem;
+    }
+    .btn-outline-danger:hover { background: var(--danger); color: #fff; }
+    /* DYNAMIC ITEMS */
+    .dynamic-item {
+      background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: 8px; padding: 1rem; margin-bottom: .75rem;
+      position: relative;
+    }
+    .dynamic-item .remove-btn {
+      position: absolute; top: .5rem; right: .5rem;
+    }
+    /* TOAST */
+    .toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; }
+    .toast-msg {
+      background: var(--bg-card); border: 1px solid var(--accent);
+      color: var(--text); padding: .75rem 1.25rem; border-radius: 8px;
+      margin-top: .5rem; font-size: .875rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,.3);
+      animation: slideIn .3s ease;
+    }
+    .toast-msg.error { border-color: var(--danger); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    /* SECTION PANELS */
+    .section-panel { display: none; }
+    .section-panel.active { display: block; }
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .sidebar { width: 60px; }
+      .sidebar .brand h2, .sidebar .brand small, .sidebar-nav li a span { display: none; }
+      .sidebar-nav li a { justify-content: center; padding: .75rem; }
+      .main-content { margin-left: 60px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN SCREEN -->
+  <div id="login-screen" class="login-wrapper">
+    <div class="login-card">
+      <h1><i class="bi bi-shield-lock"></i> Admin Panel</h1>
+      <p class="subtitle">Sign in to manage your portfolio</p>
+      <form id="login-form">
+        <div class="mb-3">
+          <label class="form-label">Username</label>
+          <input type="text" class="form-control" id="login-username" autocomplete="username" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-control" id="login-password" autocomplete="current-password" required>
+        </div>
+        <div id="login-error" class="text-danger mb-3" style="font-size:.85rem; display:none;"></div>
+        <button type="submit" class="btn btn-accent w-100">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" class="dashboard">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="brand">
+        <h2><i class="bi bi-gear-fill"></i> Admin</h2>
+        <small>Portfolio Manager</small>
+      </div>
+      <ul class="sidebar-nav">
+        <li><a href="#" class="active" data-section="profile"><i class="bi bi-person"></i> <span>Profile</span></a></li>
+        <li><a href="#" data-section="skills"><i class="bi bi-bar-chart"></i> <span>Skills</span></a></li>
+        <li><a href="#" data-section="interests"><i class="bi bi-heart"></i> <span>Interests</span></a></li>
+        <li><a href="#" data-section="resume"><i class="bi bi-file-earmark-text"></i> <span>Resume</span></a></li>
+        <li><a href="#" data-section="contact"><i class="bi bi-envelope"></i> <span>Contact</span></a></li>
+      </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <div class="topbar">
+        <h1 id="section-title">Profile</h1>
+        <button class="btn btn-outline-danger" id="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
+      </div>
+
+      <!-- ===== PROFILE SECTION ===== -->
+      <div class="section-panel active" id="panel-profile">
+        <div class="editor-card">
+          <h3><i class="bi bi-person-badge"></i> Basic Information</h3>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Display Name</label>
+              <input type="text" class="form-control" id="p-name">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Full Name</label>
+              <input type="text" class="form-control" id="p-fullName">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Tagline (HTML allowed for &lt;span&gt; styling)</label>
+              <textarea class="form-control" id="p-tagline" rows="2"></textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Profile Image Path</label>
+              <input type="text" class="form-control" id="p-profileImage">
+            </div>
+          </div>
+        </div>
+        <div class="editor-card">
+          <h3><i class="bi bi-info-circle"></i> About Section</h3>
+          <div class="mb-3">
+            <label class="form-label">About Title</label>
+            <input type="text" class="form-control" id="p-aboutTitle">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">About Text (HTML allowed)</label>
+            <textarea class="form-control" id="p-aboutText" rows="5"></textarea>
+          </div>
+        </div>
+        <div class="editor-card">
+          <h3><i class="bi bi-list-check"></i> Personal Details</h3>
+          <div id="p-details-list"></div>
+          <button class="btn btn-outline-accent mt-2" data-action="addDetail"><i class="bi bi-plus"></i> Add Detail</button>
+        </div>
+        <div class="editor-card">
+          <h3><i class="bi bi-link-45deg"></i> Social Links</h3>
+          <div id="p-social-list"></div>
+          <button class="btn btn-outline-accent mt-2" data-action="addSocialLink" data-target="p-social-list"><i class="bi bi-plus"></i> Add Link</button>
+        </div>
+        <div class="editor-card">
+          <h3><i class="bi bi-search"></i> SEO Meta</h3>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label">Meta Title</label>
+              <input type="text" class="form-control" id="p-metaTitle">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Meta Description</label>
+              <textarea class="form-control" id="p-metaDesc" rows="2"></textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Meta Keywords</label>
+              <input type="text" class="form-control" id="p-metaKeywords">
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-accent" data-action="save" data-section="profile"><i class="bi bi-save"></i> Save Profile</button>
+      </div>
+
+      <!-- ===== SKILLS SECTION ===== -->
+      <div class="section-panel" id="panel-skills">
+        <div class="editor-card">
+          <h3><i class="bi bi-bar-chart"></i> Skills</h3>
+          <div id="skills-list"></div>
+          <button class="btn btn-outline-accent mt-2" data-action="addSkill"><i class="bi bi-plus"></i> Add Skill</button>
+        </div>
+        <button class="btn btn-accent" data-action="save" data-section="skills"><i class="bi bi-save"></i> Save Skills</button>
+      </div>
+
+      <!-- ===== INTERESTS SECTION ===== -->
+      <div class="section-panel" id="panel-interests">
+        <div class="editor-card">
+          <h3><i class="bi bi-heart"></i> Interests</h3>
+          <div id="interests-list"></div>
+          <button class="btn btn-outline-accent mt-2" data-action="addInterest"><i class="bi bi-plus"></i> Add Interest</button>
+        </div>
+        <button class="btn btn-accent" data-action="save" data-section="interests"><i class="bi bi-save"></i> Save Interests</button>
+      </div>
+
+      <!-- ===== RESUME SECTION ===== -->
+      <div class="section-panel" id="panel-resume">
+        <div class="editor-card">
+          <h3><i class="bi bi-person-lines-fill"></i> Summary</h3>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Name</label>
+              <input type="text" class="form-control" id="r-summaryName">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Summary Text</label>
+              <textarea class="form-control" id="r-summaryText" rows="5"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-briefcase"></i> Professional Experience</h3>
+          <div id="r-experience-list"></div>
+          <button class="btn btn-outline-accent mt-2" data-action="addResumeEntry" data-type="experience"><i class="bi bi-plus"></i> Add Experience</button>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-mortarboard"></i> Education</h3>
+          <div id="r-education-list"></div>
+          <button class="btn btn-outline-accent mt-2" data-action="addResumeEntry" data-type="education"><i class="bi bi-plus"></i> Add Education</button>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-award"></i> Certifications</h3>
+          <div id="r-certifications-list"></div>
+          <button class="btn btn-outline-accent mt-2" data-action="addResumeEntry" data-type="certifications"><i class="bi bi-plus"></i> Add Certification</button>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-trophy"></i> Honors and Awards</h3>
+          <div id="r-honors-list"></div>
+          <button class="btn btn-outline-accent mt-2" data-action="addResumeEntry" data-type="honors"><i class="bi bi-plus"></i> Add Honor/Award</button>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-journal-text"></i> Research Experience</h3>
+          <div id="r-research-list"></div>
+          <button class="btn btn-outline-accent mt-2" data-action="addResearch"><i class="bi bi-plus"></i> Add Research</button>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-lightbulb"></i> Areas of Interest</h3>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label">Title</label>
+              <input type="text" class="form-control" id="r-aoiTitle">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Description</label>
+              <textarea class="form-control" id="r-aoiDesc" rows="3"></textarea>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-accent" data-action="save" data-section="resume"><i class="bi bi-save"></i> Save Resume</button>
+      </div>
+
+      <!-- ===== CONTACT SECTION ===== -->
+      <div class="section-panel" id="panel-contact">
+        <div class="editor-card">
+          <h3><i class="bi bi-geo-alt"></i> Address</h3>
+          <input type="text" class="form-control" id="c-address">
+        </div>
+        <div class="editor-card">
+          <h3><i class="bi bi-envelope"></i> Email Addresses</h3>
+          <div id="c-emails-list"></div>
+          <button class="btn btn-outline-accent mt-2" data-action="addEmail"><i class="bi bi-plus"></i> Add Email</button>
+        </div>
+        <div class="editor-card">
+          <h3><i class="bi bi-phone"></i> Phone Numbers</h3>
+          <div id="c-phones-list"></div>
+          <button class="btn btn-outline-accent mt-2" data-action="addPhone"><i class="bi bi-plus"></i> Add Phone</button>
+        </div>
+        <div class="editor-card">
+          <h3><i class="bi bi-link-45deg"></i> Social Links</h3>
+          <div id="c-social-list"></div>
+          <button class="btn btn-outline-accent mt-2" data-action="addSocialLink" data-target="c-social-list"><i class="bi bi-plus"></i> Add Link</button>
+        </div>
+        <button class="btn btn-accent" data-action="save" data-section="contact"><i class="bi bi-save"></i> Save Contact</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/js/admin.js"></script>
+</body>
+</html>

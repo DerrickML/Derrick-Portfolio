@@ -1,0 +1,142 @@
+{
+  "summary": {
+    "name": "Derrick Locha Mayiku",
+    "text": "Derrick is a dedicated software engineer specializing in full-stack development and systems engineering. He holds a Master's degree in Computer Applications (Distinction) from JAIN University with a CGPA of 9.23/10.00, awarded under the prestigious \"i-Learn\" Scholarship by the MEA under the e-VBAB Project. With a strong foundation from his BSc in Computer Science from Makerere University, he currently serves as the Systems Principal Lead at the National Renewable Energy Platform (NREP), overseeing IT infrastructure to promote renewable energy initiatives. Derrick is passionate about AI and IoT, actively exploring these areas to drive innovation in his field. He has prior experience as an Application Developer at Crownzcom Ltd and has demonstrated leadership as the team lead of the AgriOT Team during the UN-World Food Program NextGen-Innovation program in Denmark."
+  },
+  "experience": [
+    {
+      "title": "Principal Systems Lead",
+      "organization": "National Renewable Energy Platform (NREP), Ministry of Energy & Mineral Development, Uganda",
+      "period": "Aug 2024 - Present",
+      "bullets": [
+        "Oversee operational and strategic facets of IT infrastructure, ensuring robust and secure systems aligned with NREP's mission to promote renewable energy.",
+        "Drive innovation by introducing new technologies and solutions that enhance efficiency and effectiveness.",
+        "Provide IT expertise for various projects, ensuring seamless integration and optimal usage of technology.",
+        "Lead in-house software development efforts, creating tailored solutions to meet specific needs.",
+        "Mentor and guide IT staff, fostering professional development and collaboration."
+      ]
+    },
+    {
+      "title": "Application Developer",
+      "organization": "Crownzcom Ltd",
+      "period": "Jul 2023 - Aug 2024",
+      "bullets": [
+        "Designed and implemented server-side architecture and APIs for various applications.",
+        "Developed and integrated databases to ensure robust data storage and retrieval systems.",
+        "Implemented comprehensive security measures to protect software and user data.",
+        "Optimized back-end performance and scalability for improved user experience.",
+        "Created user-friendly website layouts and applications with responsive design.",
+        "Collaborated on website development from initial concept to final deployment."
+      ]
+    },
+    {
+      "title": "Volunteer - IT/System Support",
+      "organization": "National Renewable Energy Platform (NREP), Ministry of Energy & Mineral Development, Uganda",
+      "period": "Mar 2022 - Jul 2023",
+      "bullets": [
+        "Managed and maintained IT infrastructure and systems, ensuring smooth daily operations.",
+        "Enhanced system utilization by providing comprehensive training and support to staff.",
+        "Safeguarded system integrity through effective troubleshooting and disaster recovery strategies.",
+        "Ensured security by overseeing timely software updates and security patches.",
+        "Spearheaded the development and improvement of the NREP website."
+      ]
+    },
+    {
+      "title": "Team Lead - AgriOT Team",
+      "organization": "UN-World Food Program NextGen-Innovation, DTU SkyLab-FoodLab",
+      "period": "Feb 2021 - Dec 2021",
+      "bullets": [
+        "Led a team of 5 during the NextGen-Innovation program in partnership with DTU SkyLab FoodLab and the Denmark Ministry of Foreign Affairs.",
+        "Developed an automated SMART IoT-based vanilla storage system controllable remotely.",
+        "Monitored project progress, managed risks, and established contingency plans.",
+        "Facilitated cross-functional team-building activities and meetings.",
+        "Established professional relationships to achieve quick resolutions of issues."
+      ]
+    },
+    {
+      "title": "Student Intern",
+      "organization": "Parliament of the Republic of Uganda",
+      "period": "May 2019 - Aug 2019",
+      "bullets": [
+        "Supported the ICT Department in ensuring proper functioning of hardware and software.",
+        "Contributed to department reorganization and received commendations for high service standards.",
+        "Demonstrated commitment, enhancing department performance despite staff shortages.",
+        "Introduced and implemented training plans for staff and interns."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "title": "Master of Computer Applications in Computer Science & IT (Distinction)",
+      "institution": "JAIN (Deemed-to-be University), Bengaluru, India",
+      "period": "2022 - 2024 | CGPA 9.23/10.00",
+      "description": "Completed a Master's degree with distinction, enhancing extensive knowledge and skills in computer science and information technology."
+    },
+    {
+      "title": "Bachelor of Science in Computer Science (Hons.)",
+      "institution": "Makerere University, Kampala, Uganda",
+      "period": "2017 - 2021 | CGPA 3.57/5.00",
+      "description": "Completed undergraduate studies, laying a strong foundation in computer science."
+    }
+  ],
+  "certifications": [
+    {
+      "title": "ALX Software Engineering Certification (Backend Specialization)",
+      "institution": "ALX Africa",
+      "period": "03/2022 - 03/2023",
+      "description": "Completed an intensive 1-year software engineering course covering foundations, backend development, and frontend development, with a focus on backend specialization."
+    },
+    {
+      "title": "Certificate Course in Statistical Data Analysis",
+      "institution": "Kyambogo University & Hitech Systems Training School",
+      "period": "03/2017 - 04/2017",
+      "description": "Successfully completed a course covering statistical analysis tools: SPSS, Epidata, Stata, EViews, enhancing data analysis capabilities."
+    }
+  ],
+  "honors": [
+    {
+      "title": "\"i-Learn\" Scholarship Awardee under the e-VBAB Project",
+      "institution": "Ministry of External Affairs (MEA), Government of India",
+      "period": "2022",
+      "description": "Received a 100% scholarship to pursue a Master's degree at JAIN University, awarded for academic excellence and potential."
+    },
+    {
+      "title": "Hult Prize Regional Competition - Second Runners-up",
+      "institution": "Hult Prize Foundation - Nairobi, Kenya",
+      "period": "04/2021",
+      "description": "Emerged as the second runners-up representing Makerere University under the theme \"Food for Good.\""
+    },
+    {
+      "title": "UN-World Food Program NextGen-Innovation - Top 3 Teams",
+      "institution": "United Nations World Food Program & Technical University of Denmark",
+      "period": "03/2021",
+      "description": "Ranked among the top 3 teams out of 9 in the bootcamp, showcasing innovative solutions to address food-related challenges."
+    },
+    {
+      "title": "Hult Prize OnCampus Competition Winners",
+      "institution": "Hult Prize Foundation - Makerere University Kampala",
+      "period": "12/2020",
+      "description": "Won the on-campus competition at Makerere University under the theme \"Food for Good.\""
+    }
+  ],
+  "research": [
+    {
+      "title": "Research Participant in Sustainable Food Systems and Healthy Nutrition",
+      "institution": "Transformation Labs Project, University of Copenhagen, Denmark",
+      "period": "February 2023",
+      "bullets": [
+        "Engaged in interdisciplinary workshops focusing on sustainable food systems and healthy nutrition.",
+        "Collaborated with researchers, government representatives, and leading science experts to address global food challenges.",
+        "Contributed to the development of innovative solutions, specifically on \"Verification Systems Using Remote Sensing for Repurposed Agricultural Subsidies.\"",
+        "Provided technology-focused insights and strategies in the co-creation of transformative ideas.",
+        "Played a key role in ideation and planning, aiming to drive impactful and sustainable changes in global food systems."
+      ],
+      "publicationUrl": "https://transformationlabs.net/Idea%20Catalog%202024.pdf",
+      "publicationTitle": "Publication: Transformation Labs Idea Catalog 2024"
+    }
+  ],
+  "areasOfInterest": {
+    "title": "Artificial Intelligence (AI) and Internet of Things (IoT)",
+    "description": "Currently exploring AI and IoT, aspiring to integrate these technologies into future projects to drive innovation and efficiency."
+  }
+}

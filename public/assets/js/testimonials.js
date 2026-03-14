@@ -11,16 +11,25 @@ document.addEventListener('DOMContentLoaded', function() {
           const testimonialItem = document.createElement('div');
           testimonialItem.classList.add('testimonial-item');
   
-          testimonialItem.innerHTML = `
-            <p>
-              <i class="bx bxs-quote-alt-left quote-icon-left"></i>
-              ${testimonial.quote}
-              <i class="bx bxs-quote-alt-right quote-icon-right"></i>
-            </p>
-            <!--<img src="${testimonial.image}" class="testimonial-img" alt="${testimonial.name}">-->
-            <h3>${testimonial.name}</h3>
-            <h4>${testimonial.title}</h4>
-          `;
+          // Build DOM safely to prevent XSS from external data
+          const p = document.createElement('p');
+          const quoteLeft = document.createElement('i');
+          quoteLeft.className = 'bx bxs-quote-alt-left quote-icon-left';
+          const quoteRight = document.createElement('i');
+          quoteRight.className = 'bx bxs-quote-alt-right quote-icon-right';
+          const quoteText = document.createTextNode(testimonial.quote || '');
+          p.appendChild(quoteLeft);
+          p.appendChild(quoteText);
+          p.appendChild(quoteRight);
+
+          const h3 = document.createElement('h3');
+          h3.textContent = testimonial.name || '';
+          const h4 = document.createElement('h4');
+          h4.textContent = testimonial.title || '';
+
+          testimonialItem.appendChild(p);
+          testimonialItem.appendChild(h3);
+          testimonialItem.appendChild(h4);
   
           swiperSlide.appendChild(testimonialItem);
           testimonialsContainer.appendChild(swiperSlide);

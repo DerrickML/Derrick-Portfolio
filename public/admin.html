@@ -113,10 +113,24 @@
     .dynamic-item {
       background: var(--bg-input); border: 1px solid var(--border);
       border-radius: 8px; padding: 1rem; margin-bottom: .75rem;
-      position: relative;
+      position: relative; transition: box-shadow .2s;
     }
     .dynamic-item .remove-btn {
       position: absolute; top: .5rem; right: .5rem;
+    }
+    /* DRAG HANDLE */
+    .drag-handle {
+      position: absolute; top: .5rem; left: .5rem;
+      cursor: grab; color: var(--text-muted); font-size: 1rem;
+      padding: .25rem; line-height: 1;
+    }
+    .drag-handle:active { cursor: grabbing; }
+    .sortable-list .dynamic-item { padding-left: 2rem; }
+    .sortable-ghost {
+      opacity: .4; border-color: var(--accent) !important;
+    }
+    .sortable-chosen {
+      box-shadow: 0 4px 16px rgba(16,185,129,.2);
     }
     /* TOAST */
     .toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; }
@@ -223,12 +237,12 @@
         </div>
         <div class="editor-card">
           <h3><i class="bi bi-list-check"></i> Personal Details</h3>
-          <div id="p-details-list"></div>
+          <div id="p-details-list" class="sortable-list"></div>
           <button class="btn btn-outline-accent mt-2" data-action="addDetail"><i class="bi bi-plus"></i> Add Detail</button>
         </div>
         <div class="editor-card">
           <h3><i class="bi bi-link-45deg"></i> Social Links</h3>
-          <div id="p-social-list"></div>
+          <div id="p-social-list" class="sortable-list"></div>
           <button class="btn btn-outline-accent mt-2" data-action="addSocialLink" data-target="p-social-list"><i class="bi bi-plus"></i> Add Link</button>
         </div>
         <div class="editor-card">
@@ -255,7 +269,7 @@
       <div class="section-panel" id="panel-skills">
         <div class="editor-card">
           <h3><i class="bi bi-bar-chart"></i> Skills</h3>
-          <div id="skills-list"></div>
+          <div id="skills-list" class="sortable-list"></div>
           <button class="btn btn-outline-accent mt-2" data-action="addSkill"><i class="bi bi-plus"></i> Add Skill</button>
         </div>
         <button class="btn btn-accent" data-action="save" data-section="skills"><i class="bi bi-save"></i> Save Skills</button>
@@ -265,7 +279,7 @@
       <div class="section-panel" id="panel-interests">
         <div class="editor-card">
           <h3><i class="bi bi-heart"></i> Interests</h3>
-          <div id="interests-list"></div>
+          <div id="interests-list" class="sortable-list"></div>
           <button class="btn btn-outline-accent mt-2" data-action="addInterest"><i class="bi bi-plus"></i> Add Interest</button>
         </div>
         <button class="btn btn-accent" data-action="save" data-section="interests"><i class="bi bi-save"></i> Save Interests</button>
@@ -289,31 +303,31 @@
 
         <div class="editor-card">
           <h3><i class="bi bi-briefcase"></i> Professional Experience</h3>
-          <div id="r-experience-list"></div>
+          <div id="r-experience-list" class="sortable-list"></div>
           <button class="btn btn-outline-accent mt-2" data-action="addResumeEntry" data-type="experience"><i class="bi bi-plus"></i> Add Experience</button>
         </div>
 
         <div class="editor-card">
           <h3><i class="bi bi-mortarboard"></i> Education</h3>
-          <div id="r-education-list"></div>
+          <div id="r-education-list" class="sortable-list"></div>
           <button class="btn btn-outline-accent mt-2" data-action="addResumeEntry" data-type="education"><i class="bi bi-plus"></i> Add Education</button>
         </div>
 
         <div class="editor-card">
           <h3><i class="bi bi-award"></i> Certifications</h3>
-          <div id="r-certifications-list"></div>
+          <div id="r-certifications-list" class="sortable-list"></div>
           <button class="btn btn-outline-accent mt-2" data-action="addResumeEntry" data-type="certifications"><i class="bi bi-plus"></i> Add Certification</button>
         </div>
 
         <div class="editor-card">
           <h3><i class="bi bi-trophy"></i> Honors and Awards</h3>
-          <div id="r-honors-list"></div>
+          <div id="r-honors-list" class="sortable-list"></div>
           <button class="btn btn-outline-accent mt-2" data-action="addResumeEntry" data-type="honors"><i class="bi bi-plus"></i> Add Honor/Award</button>
         </div>
 
         <div class="editor-card">
           <h3><i class="bi bi-journal-text"></i> Research Experience</h3>
-          <div id="r-research-list"></div>
+          <div id="r-research-list" class="sortable-list"></div>
           <button class="btn btn-outline-accent mt-2" data-action="addResearch"><i class="bi bi-plus"></i> Add Research</button>
         </div>
 
@@ -341,17 +355,17 @@
         </div>
         <div class="editor-card">
           <h3><i class="bi bi-envelope"></i> Email Addresses</h3>
-          <div id="c-emails-list"></div>
+          <div id="c-emails-list" class="sortable-list"></div>
           <button class="btn btn-outline-accent mt-2" data-action="addEmail"><i class="bi bi-plus"></i> Add Email</button>
         </div>
         <div class="editor-card">
           <h3><i class="bi bi-phone"></i> Phone Numbers</h3>
-          <div id="c-phones-list"></div>
+          <div id="c-phones-list" class="sortable-list"></div>
           <button class="btn btn-outline-accent mt-2" data-action="addPhone"><i class="bi bi-plus"></i> Add Phone</button>
         </div>
         <div class="editor-card">
           <h3><i class="bi bi-link-45deg"></i> Social Links</h3>
-          <div id="c-social-list"></div>
+          <div id="c-social-list" class="sortable-list"></div>
           <button class="btn btn-outline-accent mt-2" data-action="addSocialLink" data-target="c-social-list"><i class="bi bi-plus"></i> Add Link</button>
         </div>
         <button class="btn btn-accent" data-action="save" data-section="contact"><i class="bi bi-save"></i> Save Contact</button>
@@ -364,6 +378,7 @@
   <div class="toast-container" id="toast-container"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="assets/js/admin.js"></script>
 </body>
 </html>

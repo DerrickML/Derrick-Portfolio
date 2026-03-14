@@ -8,6 +8,7 @@
 // STATE
 // ──────────────────────────────────────────
 let currentData = {};
+const sortableInstances = [];
 
 // ──────────────────────────────────────────
 // UTILITY
@@ -139,6 +140,7 @@ async function loadAllData() {
     populateInterests(currentData.interests);
     populateResume(currentData.resume);
     populateContact(currentData.contact);
+    initSortable();
   } catch (err) {
     showToast('Error loading data: ' + err.message, true);
   }
@@ -296,6 +298,7 @@ function addDetail(label, value) {
   const div = document.createElement('div');
   div.className = 'dynamic-item';
   div.innerHTML = `
+    <span class="drag-handle"><i class="bi bi-grip-vertical"></i></span>
     <button class="btn btn-outline-danger remove-btn"><i class="bi bi-x"></i></button>
     <div class="row g-2">
       <div class="col-4">
@@ -315,6 +318,7 @@ function addSocialLink(listId, platform, url, icon) {
   const div = document.createElement('div');
   div.className = 'dynamic-item';
   div.innerHTML = `
+    <span class="drag-handle"><i class="bi bi-grip-vertical"></i></span>
     <button class="btn btn-outline-danger remove-btn"><i class="bi bi-x"></i></button>
     <div class="row g-2">
       <div class="col-3">
@@ -339,6 +343,7 @@ function addSkill(name, pct) {
   div.className = 'dynamic-item';
   const pctVal = pct !== undefined ? pct : 50;
   div.innerHTML = `
+    <span class="drag-handle"><i class="bi bi-grip-vertical"></i></span>
     <button class="btn btn-outline-danger remove-btn"><i class="bi bi-x"></i></button>
     <div class="row g-2 align-items-end">
       <div class="col-6">
@@ -359,6 +364,7 @@ function addInterest(name, icon, color) {
   const div = document.createElement('div');
   div.className = 'dynamic-item';
   div.innerHTML = `
+    <span class="drag-handle"><i class="bi bi-grip-vertical"></i></span>
     <button class="btn btn-outline-danger remove-btn"><i class="bi bi-x"></i></button>
     <div class="row g-2">
       <div class="col-4">
@@ -385,6 +391,7 @@ function addEmail(address) {
   const div = document.createElement('div');
   div.className = 'dynamic-item';
   div.innerHTML = `
+    <span class="drag-handle"><i class="bi bi-grip-vertical"></i></span>
     <button class="btn btn-outline-danger remove-btn"><i class="bi bi-x"></i></button>
     <input type="email" class="form-control" data-field="address" value="${escHtml(address || '')}" placeholder="email@example.com">`;
   list.appendChild(div);
@@ -395,6 +402,7 @@ function addPhone(number, tel) {
   const div = document.createElement('div');
   div.className = 'dynamic-item';
   div.innerHTML = `
+    <span class="drag-handle"><i class="bi bi-grip-vertical"></i></span>
     <button class="btn btn-outline-danger remove-btn"><i class="bi bi-x"></i></button>
     <div class="row g-2">
       <div class="col-6">
@@ -417,6 +425,7 @@ function addResumeEntry(type, data) {
   const orgLabel = (type === 'experience') ? 'Organization' : 'Institution';
 
   div.innerHTML = `
+    <span class="drag-handle"><i class="bi bi-grip-vertical"></i></span>
     <button class="btn btn-outline-danger remove-btn"><i class="bi bi-x"></i></button>
     <div class="row g-2">
       <div class="col-12">
@@ -473,6 +482,7 @@ function addResearch(data) {
   const div = document.createElement('div');
   div.className = 'dynamic-item';
   div.innerHTML = `
+    <span class="drag-handle"><i class="bi bi-grip-vertical"></i></span>
     <button class="btn btn-outline-danger remove-btn"><i class="bi bi-x"></i></button>
     <div class="row g-2">
       <div class="col-12">
@@ -546,6 +556,26 @@ function escHtml(str) {
   const div = document.createElement('div');
   div.appendChild(document.createTextNode(str));
   return div.innerHTML;
+}
+
+// ──────────────────────────────────────────
+// SORTABLE (drag & drop reordering)
+// ──────────────────────────────────────────
+function initSortable() {
+  // Destroy any existing instances
+  sortableInstances.forEach(s => s.destroy());
+  sortableInstances.length = 0;
+
+  document.querySelectorAll('.sortable-list').forEach(list => {
+    const instance = new Sortable(list, {
+      handle: '.drag-handle',
+      animation: 200,
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+    });
+    sortableInstances.push(instance);
+  });
 }
 
 // ──────────────────────────────────────────

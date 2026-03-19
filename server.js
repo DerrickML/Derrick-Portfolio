@@ -16,37 +16,37 @@ const app = express();
 
 // Security: Set secure HTTP headers with CSP whitelist for trusted CDNs
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: [
-        "'self'",
-        "'unsafe-inline'",
-        "https://code.jquery.com",
-        "https://cdn.jsdelivr.net",
-        "https://www.googletagmanager.com",
-        "https://www.google-analytics.com",
-      ],
-      styleSrc: [
-        "'self'",
-        "'unsafe-inline'",
-        "https://fonts.googleapis.com",
-        "https://cdn.jsdelivr.net",
-      ],
-      fontSrc: [
-        "'self'",
-        "https://fonts.gstatic.com",
-        "https://cdn.jsdelivr.net",
-        "data:",
-      ],
-      imgSrc: ["'self'", "data:", "https://www.google-analytics.com"],
-      connectSrc: [
-        "'self'",
-        "https://script.google.com",
-        "https://www.google-analytics.com",
-      ],
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: [
+                "'self'",
+                "'unsafe-inline'",
+                "https://code.jquery.com",
+                "https://cdn.jsdelivr.net",
+                "https://www.googletagmanager.com",
+                "https://www.google-analytics.com",
+            ],
+            styleSrc: [
+                "'self'",
+                "'unsafe-inline'",
+                "https://fonts.googleapis.com",
+                "https://cdn.jsdelivr.net",
+            ],
+            fontSrc: [
+                "'self'",
+                "https://fonts.gstatic.com",
+                "https://cdn.jsdelivr.net",
+                "data:",
+            ],
+            imgSrc: ["'self'", "data:", "https://www.google-analytics.com"],
+            connectSrc: [
+                "'self'",
+                "https://script.google.com",
+                "https://www.google-analytics.com",
+            ],
+        },
     },
-  },
 }));
 
 // Serve static files from the 'public' folder
@@ -56,27 +56,27 @@ app.use(express.json());
 
 // Session middleware for admin auth
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'change-this-secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: false, // set to true if using HTTPS in production
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-  },
+    secret: process.env.SESSION_SECRET || 'change-this-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        secure: false, // set to true if using HTTPS in production
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
 }));
 
 // Rate limiter for the email endpoint (5 requests per 15 minutes per IP)
 const emailLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { error: 'Too many email requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false,
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: { error: 'Too many email requests. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
 });
 
 // Allowed portfolio data sections (whitelist to prevent path traversal)
-const PORTFOLIO_SECTIONS = ['profile', 'skills', 'interests', 'resume', 'contact'];
+const PORTFOLIO_SECTIONS = ['profile', 'skills', 'interests', 'resume', 'contact', 'projects'];
 
 // Generic endpoint to serve portfolio data from JSON files
 app.get('/api/portfolio/:section', (req, res) => {
@@ -127,7 +127,7 @@ function generateSchedule(members, daysToGenerate = 7) {
         if (diff !== 0) return diff;
         return a.name.localeCompare(b.name);
     });
-    
+
     let schedule = [];
 
     for (let i = 0; i < daysToGenerate; i++) {
@@ -142,7 +142,7 @@ function generateSchedule(members, daysToGenerate = 7) {
                     date: day.format('YYYY-MM-DD'),
                     person: member.name
                 });
-                member.lastOpened = day.format(); 
+                member.lastOpened = day.format();
                 member.nextOpenDay = day.format('YYYY-MM-DD');
                 assigned = true;
                 break;
@@ -222,15 +222,24 @@ app.get('/api/testimonials', async (req, res) => {
     try {
         const response = await fetch('https://script.google.com/macros/s/AKfycbyNpfflHQUWQ1TzMOEu5S28L23X-KogevFd1K201jzjD_pHUeTIqm0kjegRyACGq-FreA/exec');
         const data = await response.json();
-        
+
+        console.log(data);
+
         // Map the data to match your frontend structure
-        const testimonials = data.map(item => ({
-            quote: item['Testimonial Quote'],
-            name: item['Full Name'],
-            title: item['Position/Title'],
-            image: 'assets/img/testimonials/placeholder.png' // Use a placeholder image
-        }));
-        
+        // Normalize keys by trimming whitespace (Google Sheets headers have trailing spaces)
+        const testimonials = data.map(item => {
+            const trimmed = {};
+            for (const key of Object.keys(item)) {
+                trimmed[key.trim()] = item[key];
+            }
+            return {
+                quote: trimmed['Testimonial Quote'] || '',
+                name: trimmed['Full Name'] || '',
+                title: trimmed['Position/Title'] || '',
+                image: 'assets/img/testimonials/placeholder.png',
+            };
+        });
+
         res.json(testimonials);
     } catch (error) {
         console.error('Error fetching testimonials:', error);

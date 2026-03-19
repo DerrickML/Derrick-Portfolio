@@ -110,6 +110,10 @@ document.addEventListener('click', (e) => {
     case 'addResearch': addResearch(); break;
     case 'addSocialLink': addSocialLink(actionBtn.dataset.target); break;
     case 'addResumeEntry': addResumeEntry(actionBtn.dataset.type); break;
+    case 'addProject': addProject(); break;
+    case 'createProject': openProjectEditor(-1); break;
+    case 'editProject': openProjectEditor(parseInt(actionBtn.dataset.index)); break;
+    case 'deleteProject': deleteProject(parseInt(actionBtn.dataset.index)); break;
     case 'save': saveSection(actionBtn.dataset.section); break;
   }
 });
@@ -132,7 +136,7 @@ document.addEventListener('input', (e) => {
 // ──────────────────────────────────────────
 async function loadAllData() {
   try {
-    const sections = ['profile', 'skills', 'interests', 'resume', 'contact'];
+    const sections = ['profile', 'skills', 'interests', 'resume', 'contact', 'projects'];
     const results = await Promise.all(sections.map(s => apiCall(`/api/portfolio/${s}`, 'GET')));
     sections.forEach((s, i) => currentData[s] = results[i]);
     populateProfile(currentData.profile);
@@ -140,6 +144,7 @@ async function loadAllData() {
     populateInterests(currentData.interests);
     populateResume(currentData.resume);
     populateContact(currentData.contact);
+    populateProjects(currentData.projects);
     initSortable();
   } catch (err) {
     showToast('Error loading data: ' + err.message, true);
@@ -539,6 +544,7 @@ async function saveSection(section) {
     case 'interests': data = collectInterests(); break;
     case 'resume': data = collectResume(); break;
     case 'contact': data = collectContact(); break;
+    case 'projects': data = collectProjects(); break;
     default: return showToast('Unknown section', true);
   }
   try {
@@ -559,6 +565,154 @@ function escHtml(str) {
 }
 
 // ──────────────────────────────────────────
+// PROJECTS (modal-based create/edit)
+// ──────────────────────────────────────────
+let projectsData = [];
+
+function populateProjects(data) {
+  projectsData = data || [];
+  renderProjectList();
+}
+
+function renderProjectList() {
+  const list = document.getElementById('projects-list');
+  list.innerHTML = '';
+  projectsData.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'project-list-item';
+    div.dataset.index = i;
+    const statusClass = (p.status || '').toLowerCase() === 'completed' ? 'completed' : 'ongoing';
+    div.innerHTML = `
+      <span class="drag-handle"><i class="bi bi-grip-vertical"></i></span>
+      <div class="proj-info">
+        <div class="proj-title">${escHtml(p.title || 'Untitled')}</div>
+        <div class="proj-desc">${escHtml(p.description || '')}</div>
+      </div>
+      <span class="proj-status ${statusClass}">${escHtml(p.status || 'Ongoing')}</span>
+      <div class="proj-actions">
+        <button class="btn btn-outline-light" data-action="editProject" data-index="${i}" title="Edit"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-outline-danger" data-action="deleteProject" data-index="${i}" title="Delete"><i class="bi bi-trash"></i></button>
+      </div>`;
+    list.appendChild(div);
+  });
+  // Re-init sortable for the new items
+  initSortable();
+}
+
+function collectProjects() {
+  return projectsData;
+}
+
+// Persist projects to the server
+async function persistProjects() {
+  try {
+    await apiCall('/api/admin/portfolio/projects', 'PUT', projectsData);
+    showToast('Projects saved successfully!');
+  } catch (err) {
+    showToast('Error saving projects: ' + err.message, true);
+  }
+}
+
+function openProjectEditor(index) {
+  const isEdit = index >= 0 && index < projectsData.length;
+  const d = isEdit ? projectsData[index] : {};
+
+  document.getElementById('projectEditorModalLabel').innerHTML = isEdit
+    ? '<i class="bi bi-pencil"></i> Edit Project'
+    : '<i class="bi bi-plus-lg"></i> New Project';
+  document.getElementById('pe-id').value = d.id || '';
+  document.getElementById('pe-index').value = index;
+  document.getElementById('pe-title').value = d.title || '';
+  document.getElementById('pe-category').value = d.category || '';
+  document.getElementById('pe-status').value = d.status || 'Completed';
+  document.getElementById('pe-startDate').value = d.startDate || '';
+  document.getElementById('pe-endDate').value = d.endDate || '';
+  document.getElementById('pe-description').value = d.description || '';
+  document.getElementById('pe-fullDescription').value = d.fullDescription || '';
+  document.getElementById('pe-technologies').value = (d.technologies || []).join(', ');
+  document.getElementById('pe-image').value = d.image || '';
+  document.getElementById('pe-liveUrl').value = d.liveUrl || '';
+  document.getElementById('pe-repoUrl').value = d.repoUrl || '';
+  document.getElementById('pe-highlights').value = (d.highlights || []).join('\n');
+  document.getElementById('pe-client').value = d.client || '';
+
+  const modal = new bootstrap.Modal(document.getElementById('projectEditorModal'));
+  modal.show();
+}
+
+async function saveProjectFromModal() {
+  const index = parseInt(document.getElementById('pe-index').value);
+  const project = {
+    id: document.getElementById('pe-id').value || crypto.randomUUID(),
+    title: document.getElementById('pe-title').value,
+    category: document.getElementById('pe-category').value,
+    status: document.getElementById('pe-status').value,
+    startDate: document.getElementById('pe-startDate').value,
+    endDate: document.getElementById('pe-endDate').value,
+    description: document.getElementById('pe-description').value,
+    fullDescription: document.getElementById('pe-fullDescription').value,
+    technologies: document.getElementById('pe-technologies').value.split(',').map(t => t.trim()).filter(Boolean),
+    image: document.getElementById('pe-image').value,
+    liveUrl: document.getElementById('pe-liveUrl').value,
+    repoUrl: document.getElementById('pe-repoUrl').value,
+    highlights: document.getElementById('pe-highlights').value.split('\n').filter(b => b.trim()),
+    client: document.getElementById('pe-client').value,
+  };
+
+  if (!project.title) {
+    showToast('Project title is required', true);
+    return;
+  }
+
+  if (index >= 0 && index < projectsData.length) {
+    projectsData[index] = project; // update
+  } else {
+    projectsData.push(project); // create new
+  }
+
+  renderProjectList();
+  bootstrap.Modal.getInstance(document.getElementById('projectEditorModal')).hide();
+  await persistProjects();
+}
+
+async function deleteProject(index) {
+  if (index < 0 || index >= projectsData.length) return;
+  projectsData.splice(index, 1);
+  renderProjectList();
+  await persistProjects();
+}
+
+// Confirm-delete: first click → show confirm, second click → delete
+document.addEventListener('click', (e) => {
+  const delBtn = e.target.closest('[data-action="deleteProject"]');
+  if (!delBtn) return;
+  e.stopPropagation();
+
+  if (delBtn.dataset.confirm === 'true') {
+    // Second click: actually delete
+    deleteProject(parseInt(delBtn.dataset.index));
+  } else {
+    // First click: show confirmation
+    delBtn.dataset.confirm = 'true';
+    delBtn.innerHTML = '<i class="bi bi-check-lg"></i> Sure?';
+    delBtn.classList.add('btn-danger');
+    delBtn.classList.remove('btn-outline-danger');
+    // Reset after 3 seconds if not clicked
+    setTimeout(() => {
+      if (delBtn.isConnected) {
+        delBtn.dataset.confirm = 'false';
+        delBtn.innerHTML = '<i class="bi bi-trash"></i>';
+        delBtn.classList.remove('btn-danger');
+        delBtn.classList.add('btn-outline-danger');
+      }
+    }, 3000);
+  }
+}, true); // capture phase to intercept before other handlers
+
+// Wire up the modal save button
+document.getElementById('pe-save-btn').addEventListener('click', saveProjectFromModal);
+
+// ──────────────────────────────────────────
 // SORTABLE (drag & drop reordering)
 // ──────────────────────────────────────────
 function initSortable() {
@@ -573,6 +727,25 @@ function initSortable() {
       ghostClass: 'sortable-ghost',
       chosenClass: 'sortable-chosen',
       dragClass: 'sortable-drag',
+      onEnd: function (evt) {
+        // If this is the projects list, sync the projectsData array
+        if (list.id === 'projects-list') {
+          const items = list.querySelectorAll('.project-list-item');
+          const reordered = [];
+          items.forEach(item => {
+            const idx = parseInt(item.dataset.index);
+            if (projectsData[idx]) reordered.push(projectsData[idx]);
+          });
+          projectsData = reordered;
+          // Update data-index attributes to match new order
+          items.forEach((item, i) => { item.dataset.index = i; });
+          // Update edit/delete button indices
+          items.forEach((item, i) => {
+            item.querySelectorAll('[data-index]').forEach(btn => { btn.dataset.index = i; });
+          });
+          persistProjects();
+        }
+      },
     });
     sortableInstances.push(instance);
   });

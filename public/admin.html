@@ -63,12 +63,17 @@
       border-left-color: var(--accent);
     }
     .sidebar-nav li a i { font-size: 1.1rem; width: 20px; text-align: center; }
-    .main-content { margin-left: 240px; padding: 2rem; max-width: 960px; }
+    .main-content { margin-left: 240px; padding: 0; }
     .topbar {
+      position: sticky; top: 0; z-index: 5;
       display: flex; justify-content: space-between; align-items: center;
+      padding: 1rem 2rem;
+      background: var(--bg-dark);
+      border-bottom: 1px solid var(--border);
       margin-bottom: 2rem;
     }
     .topbar h1 { font-size: 1.5rem; margin: 0; }
+    .section-panels-wrap { padding: 0 2rem 2rem; max-width: 960px; }
     /* EDITOR CARDS */
     .editor-card {
       background: var(--bg-card); border: 1px solid var(--border);
@@ -143,6 +148,23 @@
     }
     .toast-msg.error { border-color: var(--danger); }
     @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    /* PROJECT LIST ITEMS */
+    .project-list-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; margin-bottom: 8px;
+      background: var(--bg-dark); border: 1px solid var(--border);
+      border-radius: 10px; transition: border-color .2s;
+    }
+    .project-list-item:hover { border-color: var(--accent); }
+    .project-list-item .drag-handle { cursor: grab; color: var(--text-muted); font-size: 1.1rem; flex-shrink: 0; }
+    .project-list-item .proj-info { flex: 1; min-width: 0; }
+    .project-list-item .proj-title { font-weight: 600; color: #fff; font-size: .95rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .project-list-item .proj-desc { font-size: .78rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .project-list-item .proj-status { flex-shrink: 0; padding: 3px 10px; border-radius: 50px; font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+    .project-list-item .proj-status.completed { background: rgba(16,185,129,.15); color: var(--accent); }
+    .project-list-item .proj-status.ongoing { background: rgba(245,158,11,.15); color: #f59e0b; }
+    .project-list-item .proj-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .project-list-item .proj-actions .btn { padding: 4px 8px; font-size: .78rem; }
     /* SECTION PANELS */
     .section-panel { display: none; }
     .section-panel.active { display: block; }
@@ -191,6 +213,7 @@
         <li><a href="#" data-section="interests"><i class="bi bi-heart"></i> <span>Interests</span></a></li>
         <li><a href="#" data-section="resume"><i class="bi bi-file-earmark-text"></i> <span>Resume</span></a></li>
         <li><a href="#" data-section="contact"><i class="bi bi-envelope"></i> <span>Contact</span></a></li>
+        <li><a href="#" data-section="projects"><i class="bi bi-kanban"></i> <span>Projects</span></a></li>
       </ul>
     </nav>
 
@@ -201,6 +224,7 @@
         <button class="btn btn-outline-danger" id="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
       </div>
 
+      <div class="section-panels-wrap">
       <!-- ===== PROFILE SECTION ===== -->
       <div class="section-panel active" id="panel-profile">
         <div class="editor-card">
@@ -371,8 +395,100 @@
         <button class="btn btn-accent" data-action="save" data-section="contact"><i class="bi bi-save"></i> Save Contact</button>
       </div>
 
+      <!-- ===== PROJECTS SECTION ===== -->
+      <div class="section-panel" id="panel-projects">
+        <div class="editor-card">
+          <h3><i class="bi bi-kanban"></i> Projects</h3>
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <p style="font-size:.8rem; color:var(--text-muted); margin:0;">Drag to reorder. Click a project to edit.</p>
+            <button class="btn btn-outline-accent" data-action="createProject"><i class="bi bi-plus-lg"></i> New Project</button>
+          </div>
+          <div id="projects-list" class="sortable-list"></div>
+        </div>
+        <button class="btn btn-accent" data-action="save" data-section="projects"><i class="bi bi-save"></i> Save Projects</button>
+      </div>
+
+      </div><!-- .section-panels-wrap -->
+
+    <!-- Project Editor Modal -->
+    <div class="modal fade" id="projectEditorModal" tabindex="-1" aria-labelledby="projectEditorModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content" style="background:var(--bg-card); border:1px solid var(--border); border-radius:16px;">
+          <div class="modal-header" style="border-bottom:1px solid var(--border); padding:1.25rem 1.5rem;">
+            <h5 class="modal-title" id="projectEditorModalLabel" style="color:var(--accent);"><i class="bi bi-kanban"></i> New Project</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" style="padding:1.5rem;">
+            <input type="hidden" id="pe-id">
+            <input type="hidden" id="pe-index" value="-1">
+            <div class="row g-3">
+              <div class="col-8">
+                <label class="form-label">Title</label>
+                <input type="text" class="form-control" id="pe-title" placeholder="Project name">
+              </div>
+              <div class="col-4">
+                <label class="form-label">Category</label>
+                <input type="text" class="form-control" id="pe-category" placeholder="Web App, IoT, etc.">
+              </div>
+              <div class="col-4">
+                <label class="form-label">Status</label>
+                <select class="form-select" id="pe-status">
+                  <option value="Completed">Completed</option>
+                  <option value="Ongoing">Ongoing</option>
+                </select>
+              </div>
+              <div class="col-4">
+                <label class="form-label">Start Date</label>
+                <input type="text" class="form-control" id="pe-startDate" placeholder="2024-01">
+              </div>
+              <div class="col-4">
+                <label class="form-label">End Date</label>
+                <input type="text" class="form-control" id="pe-endDate" placeholder="2024-06 or empty">
+              </div>
+              <div class="col-12">
+                <label class="form-label">Short Description</label>
+                <textarea class="form-control" id="pe-description" rows="2" placeholder="Brief summary shown on card..."></textarea>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Full Description</label>
+                <textarea class="form-control" id="pe-fullDescription" rows="4" placeholder="Detailed description for modal view..."></textarea>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Technologies (comma-separated)</label>
+                <input type="text" class="form-control" id="pe-technologies" placeholder="Node.js, React, MongoDB">
+              </div>
+              <div class="col-12">
+                <label class="form-label">Image Path</label>
+                <input type="text" class="form-control" id="pe-image" placeholder="assets/img/projects/my-project.png">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Live URL</label>
+                <input type="text" class="form-control" id="pe-liveUrl" placeholder="https://...">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Repo URL</label>
+                <input type="text" class="form-control" id="pe-repoUrl" placeholder="https://github.com/...">
+              </div>
+              <div class="col-12">
+                <label class="form-label">Key Highlights (one per line)</label>
+                <textarea class="form-control" id="pe-highlights" rows="3" placeholder="One highlight per line..."></textarea>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Client / Organization</label>
+                <input type="text" class="form-control" id="pe-client" placeholder="Optional">
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer" style="border-top:1px solid var(--border); padding:1rem 1.5rem;">
+            <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-accent" id="pe-save-btn"><i class="bi bi-check-lg"></i> Save Project</button>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
+
+    </div><!-- .main-content -->
+  </div><!-- #dashboard -->
 
   <!-- Toast container -->
   <div class="toast-container" id="toast-container"></div>

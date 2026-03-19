@@ -1,16 +1,36 @@
 {
   "address": "Kampala, Uganda",
   "emails": [
-    { "address": "d.maiku@derrickml.com" },
-    { "address": "derrickmaiku@gmail.com" },
-    { "address": "d.maiku@nrep.ug" }
+    {
+      "address": "d.maiku@derrickml.com"
+    },
+    {
+      "address": "derrickmaiku@gmail.com"
+    },
+    {
+      "address": "dmaiku@nrep.ug"
+    }
   ],
   "phones": [
-    { "number": "+256 774 546 556", "tel": "+256774546556" },
-    { "number": "+256 754 180 862", "tel": "+256754180862" }
+    {
+      "number": "+256 774 546 556",
+      "tel": "+256774546556"
+    },
+    {
+      "number": "+256 754 180 862",
+      "tel": "+256754180862"
+    }
   ],
   "socialLinks": [
-    { "platform": "twitter", "url": "https://twitter.com/malderok01", "icon": "bi bi-twitter" },
-    { "platform": "linkedin", "url": "https://www.linkedin.com/in/derrick-l-mayiku/", "icon": "bi bi-linkedin" }
+    {
+      "platform": "x/twitter",
+      "url": "https://x.com/MayikuDerrick",
+      "icon": "bi bi-twitter"
+    },
+    {
+      "platform": "linkedin",
+      "url": "https://www.linkedin.com/in/derrick-l-mayiku/",
+      "icon": "bi bi-linkedin"
+    }
   ]
 }

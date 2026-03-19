@@ -1,0 +1,56 @@
+[
+  {
+    "id": "proj-001",
+    "title": "Smart Irrigation System",
+    "category": "IoT",
+    "status": "Completed",
+    "description": "An IoT-based automated irrigation system using soil moisture sensors and weather data to optimize water usage for smallholder farmers.",
+    "fullDescription": "Designed and built a precision irrigation system that uses Arduino-based soil moisture sensors, weather API integration, and a custom Node.js dashboard. The system reduced water waste by 35% and increased crop yield for pilot farms in Eastern Uganda. The hardware communicates via LoRa to a Raspberry Pi gateway that relays data to a cloud backend.",
+    "technologies": [
+      "Arduino",
+      "Raspberry Pi",
+      "Node.js",
+      "LoRa",
+      "MQTT",
+      "MongoDB"
+    ],
+    "image": "assets/img/projects/smart-irrigation.png",
+    "liveUrl": "",
+    "repoUrl": "https://github.com/DerrickML/smart-irrigation",
+    "startDate": "2023-06",
+    "endDate": "2024-01",
+    "highlights": [
+      "Reduced water consumption by 35% in pilot farms",
+      "Deployed LoRa mesh network covering 2km radius",
+      "Built real-time monitoring dashboard with alerts"
+    ],
+    "client": "Envirofly"
+  },
+  {
+    "id": "proj-002",
+    "title": "Personal Portfolio Website",
+    "category": "Web App",
+    "status": "Ongoing",
+    "description": "A dynamic portfolio website with an admin dashboard for managing content, built with Express.js and vanilla JavaScript.",
+    "fullDescription": "A fully dynamic portfolio website featuring a password-protected admin panel, drag-and-drop content reordering, testimonials integration with Google Sheets, and SEO optimization. The site uses a JSON-based data layer for content management and supports real-time updates without page reloads.",
+    "technologies": [
+      "Node.js",
+      "Express",
+      "JavaScript",
+      "Bootstrap",
+      "CSS3",
+      "HTML5"
+    ],
+    "image": "assets/img/projects/portfolio.png",
+    "liveUrl": "https://derrickml.com",
+    "repoUrl": "https://github.com/DerrickML/Derrick-Portfolio",
+    "startDate": "2024-08",
+    "endDate": "",
+    "highlights": [
+      "Admin dashboard with session-based authentication",
+      "Drag-and-drop content management via SortableJS",
+      "Dynamic testimonials from Google Sheets API"
+    ],
+    "client": ""
+  }
+]

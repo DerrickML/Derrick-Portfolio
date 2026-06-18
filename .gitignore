@@ -3,9 +3,6 @@ node_modules/
 stderr.log
 tmp/
 public/games/
-### PRIVATE
-# DOGS
-data/members.json
-data/secrets.json
+data/
 public/assets/uploads/
 public/private/dogs/

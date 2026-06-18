@@ -2,15 +2,6 @@
 <html lang="en">
 
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-MZHZHHQKGZ"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag() { dataLayer.push(arguments); }
-    gtag('js', new Date());
-
-    gtag('config', 'G-MZHZHHQKGZ');
-  </script>
   <meta charset="utf-8">
   <meta content="width=device-width, initial-scale=1.0" name="viewport">
 
@@ -20,7 +11,7 @@
 
   <!-- Favicons -->
   <link href="assets/img/favicon.png" rel="icon">
-  <link href="assets/img/faviconn.png" rel="apple-touch-icon">
+  <link href="assets/img/apple-touch-icon.png" rel="apple-touch-icon">
 
   <!-- Google Fonts -->
   <link
@@ -31,16 +22,11 @@
   <link href="assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
   <link href="assets/vendor/boxicons/css/boxicons.min.css" rel="stylesheet">
-  <link href="assets/vendor/glightbox/css/glightbox.min.css" rel="stylesheet">
   <link href="assets/vendor/remixicon/remixicon.css" rel="stylesheet">
   <link href="assets/vendor/swiper/swiper-bundle.min.css" rel="stylesheet">
 
   <!-- Template Main CSS File -->
   <link href="assets/css/style.css" rel="stylesheet">
-
-  <!-- JS Links -->
-  <!-- Include jQuery -->
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
   <!-- =======================================================
   * Template Name: Personal
@@ -68,7 +54,7 @@
           <li><a class="nav-link" href="#projects">Projects</a></li>
           <li><a class="nav-link" href="#contact">Contact</a></li>
         </ul>
-        <i class="bi bi-list mobile-nav-toggle"></i>
+        <button type="button" class="bi bi-list mobile-nav-toggle" aria-label="Open navigation" aria-expanded="false"></button>
       </nav><!-- .navbar -->
 
       <div class="social-links" id="header-social-links">
@@ -251,7 +237,7 @@
         <div class="col-md-6 d-flex align-items-stretch">
           <div class="info-box">
             <i class="bx bx-map"></i>
-            <h3>My Address</h3>
+            <h3 id="contact-address-title">My Address</h3>
             <p id="contact-address"></p>
           </div>
         </div>
@@ -259,7 +245,7 @@
         <div class="col-md-6 mt-4 mt-md-0 d-flex align-items-stretch">
           <div class="info-box">
             <i class="bx bx-share-alt"></i>
-            <h3>Social Profiles</h3>
+            <h3 id="contact-social-title">Social Profiles</h3>
             <div class="social-links" id="contact-social-links">
               <!-- Dynamically populated -->
             </div>
@@ -269,7 +255,7 @@
         <div class="col-md-6 mt-4 d-flex align-items-stretch">
           <div class="info-box">
             <i class="bx bx-envelope"></i>
-            <h3>Email Me</h3>
+            <h3 id="contact-email-title">Email Me</h3>
             <p id="contact-emails">
               <!-- Dynamically populated -->
             </p>
@@ -279,7 +265,7 @@
         <div class="col-md-6 mt-4 d-flex align-items-stretch">
           <div class="info-box">
             <i class="bx bx-phone-call"></i>
-            <h3>Call Me</h3>
+            <h3 id="contact-phone-title">Call Me</h3>
             <p id="contact-phones">
               <!-- Dynamically populated -->
             </p>
@@ -289,18 +275,22 @@
         <form id="contact-form" role="form" class="php-email-form mt-4">
           <div class="row">
             <div class="col-md-6 form-group">
+              <label for="name" class="visually-hidden">Your Name</label>
               <input type="text" name="name" class="form-control" id="name" placeholder="Your Name" required>
             </div>
             <div class="col-md-6 form-group mt-3 mt-md-0">
+              <label for="email" class="visually-hidden">Your Email</label>
               <input type="email" class="form-control" name="email" id="email" placeholder="Your Email"
                 required>
             </div>
           </div>
           <div class="form-group mt-3">
+            <label for="subject" class="visually-hidden">Subject</label>
             <input type="text" class="form-control" name="subject" id="subject" placeholder="Subject"
               required>
           </div>
           <div class="form-group mt-3">
+            <label for="message" class="visually-hidden">Message</label>
             <textarea class="form-control" name="message" rows="5" placeholder="Message" id="message"
               required></textarea>
           </div>
@@ -326,13 +316,13 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <p class="p-3 text-primary-ephasis">Please answer the following question to submit the form:</p>
-          <p>What is 1 + 1?</p>
+          <p class="p-3 text-primary-ephasis" id="captchaIntro">Please answer the following question to submit the form:</p>
+          <label for="captchaAnswer" class="form-label" id="captchaQuestion">What is 1 + 1?</label>
           <input type="number" id="captchaAnswer" class="form-control">
           <p id="captchaMessage" class="text-center"></p>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="captchaClose">Close</button>
           <button type="button" class="btn btn-primary" id="checkCaptcha">Submit Answer</button>
         </div>
       </div>
@@ -340,10 +330,7 @@
   </div>
 
   <!-- Vendor JS Files -->
-  <script src="assets/vendor/purecounter/purecounter_vanilla.js"></script>
   <script src="assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/vendor/glightbox/js/glightbox.min.js"></script>
-  <script src="assets/vendor/isotope-layout/isotope.pkgd.min.js"></script>
   <script src="assets/vendor/swiper/swiper-bundle.min.js"></script>
   <script src="assets/vendor/waypoints/noframework.waypoints.js"></script>
 
@@ -351,9 +338,6 @@
   <script src="assets/js/main.js"></script>
   <script src="assets/js/data-loader.js"></script>
   <script src="assets/js/contact-form.js"></script>
-
-  <!-- Include Swiper JS -->
-  <script src="https://cdn.jsdelivr.net/npm/swiper/swiper-bundle.min.js"></script>
 
   <!-- Include testimonials.js -->
   <script src="assets/js/testimonials.js?v=1.0.1"></script>

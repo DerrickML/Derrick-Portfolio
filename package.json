@@ -4,21 +4,23 @@
   "description": "Derrick's digital portfolio",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --check server.js && node --check public/assets/js/admin.js && node --check public/assets/js/contact-form.js && node --check public/assets/js/data-loader.js && node --check public/assets/js/main.js && node --check public/assets/js/projects-loader.js && node --check public/assets/js/testimonials.js",
     "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "author": "Derrick L. Mayiku",
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "express-rate-limit": "^8.3.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
     "express-session": "^1.19.0",
     "helmet": "^8.1.0",
-    "moment-timezone": "^0.5.46",
     "node-fetch": "^2.7.0",
-    "nodemailer": "^8.0.2"
+    "nodemailer": "^9.0.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"

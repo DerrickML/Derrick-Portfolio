@@ -1,5 +1,4 @@
 node_modules/
-package-lock.json
 .env
 stderr.log
 tmp/
@@ -7,4 +6,6 @@ public/games/
 ### PRIVATE
 # DOGS
 data/members.json
+data/secrets.json
+public/assets/uploads/
 public/private/dogs/

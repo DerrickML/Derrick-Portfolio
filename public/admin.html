@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Portfolio Admin</title>
+  <link href="assets/img/favicon.png" rel="icon">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
   <style>
@@ -94,6 +95,7 @@
     }
     .form-control::placeholder { color: var(--text-muted) !important; }
     .form-label { font-size: .8rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: .5px; }
+    .form-text { color: var(--text-muted) !important; font-size: .76rem; }
     textarea.form-control { min-height: 80px; }
     /* BUTTONS */
     .btn-accent {
@@ -165,6 +167,27 @@
     .project-list-item .proj-status.ongoing { background: rgba(245,158,11,.15); color: #f59e0b; }
     .project-list-item .proj-actions { display: flex; gap: 6px; flex-shrink: 0; }
     .project-list-item .proj-actions .btn { padding: 4px 8px; font-size: .78rem; }
+    .setting-row {
+      background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: 8px; padding: 1rem; margin-bottom: .75rem;
+    }
+    .setting-row .form-check-input {
+      background-color: var(--bg-dark); border-color: var(--border);
+    }
+    .setting-row .form-check-input:checked {
+      background-color: var(--accent); border-color: var(--accent);
+    }
+    .image-control {
+      background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: 8px; padding: 1rem;
+    }
+    .image-preview {
+      width: 100%; min-height: 120px; max-height: 220px;
+      object-fit: cover; background: var(--bg-dark);
+      border: 1px solid var(--border); border-radius: 8px;
+      display: none;
+    }
+    .image-preview.visible { display: block; }
     /* SECTION PANELS */
     .section-panel { display: none; }
     .section-panel.active { display: block; }
@@ -186,11 +209,11 @@
       <p class="subtitle">Sign in to manage your portfolio</p>
       <form id="login-form">
         <div class="mb-3">
-          <label class="form-label">Username</label>
+          <label class="form-label" for="login-username">Username</label>
           <input type="text" class="form-control" id="login-username" autocomplete="username" required>
         </div>
         <div class="mb-3">
-          <label class="form-label">Password</label>
+          <label class="form-label" for="login-password">Password</label>
           <input type="password" class="form-control" id="login-password" autocomplete="current-password" required>
         </div>
         <div id="login-error" class="text-danger mb-3" style="font-size:.85rem; display:none;"></div>
@@ -214,6 +237,7 @@
         <li><a href="#" data-section="resume"><i class="bi bi-file-earmark-text"></i> <span>Resume</span></a></li>
         <li><a href="#" data-section="contact"><i class="bi bi-envelope"></i> <span>Contact</span></a></li>
         <li><a href="#" data-section="projects"><i class="bi bi-kanban"></i> <span>Projects</span></a></li>
+        <li><a href="#" data-section="settings"><i class="bi bi-sliders"></i> <span>Settings</span></a></li>
       </ul>
     </nav>
 
@@ -408,6 +432,238 @@
         <button class="btn btn-accent" data-action="save" data-section="projects"><i class="bi bi-save"></i> Save Projects</button>
       </div>
 
+      <!-- ===== SETTINGS SECTION ===== -->
+      <div class="section-panel" id="panel-settings">
+        <div class="editor-card">
+          <h3><i class="bi bi-image"></i> Website Images</h3>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="image-control">
+                <label class="form-label" for="s-bg-image">Background Image URL or Path</label>
+                <input type="text" class="form-control mb-2" id="s-bg-image" placeholder="assets/img/bg.png or https://...">
+                <input type="file" class="form-control mb-2" id="s-bg-file" accept="image/png,image/jpeg,image/webp,image/gif">
+                <button class="btn btn-outline-accent mb-3" data-action="uploadSettingImage" data-file="s-bg-file" data-target="s-bg-image" data-preview="s-bg-preview" data-type="background"><i class="bi bi-upload"></i> Upload Background</button>
+                <img id="s-bg-preview" class="image-preview" alt="Background preview">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="image-control">
+                <label class="form-label" for="s-profile-image">About Profile Image URL or Path</label>
+                <input type="text" class="form-control mb-2" id="s-profile-image" placeholder="assets/img/me-0.png or https://...">
+                <input type="file" class="form-control mb-2" id="s-profile-file" accept="image/png,image/jpeg,image/webp,image/gif">
+                <button class="btn btn-outline-accent mb-3" data-action="uploadSettingImage" data-file="s-profile-file" data-target="s-profile-image" data-preview="s-profile-preview" data-type="profile"><i class="bi bi-upload"></i> Upload Profile Image</button>
+                <img id="s-profile-preview" class="image-preview" alt="Profile preview">
+              </div>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label" for="s-ga-id">Google Analytics Measurement ID</label>
+            <input type="text" class="form-control" id="s-ga-id" placeholder="G-XXXXXXXXXX">
+            <div class="form-text">Leave blank to disable Google Analytics script loading.</div>
+          </div>
+          <button class="btn btn-accent mt-3" data-action="saveSettings"><i class="bi bi-save"></i> Save Website Settings</button>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-window-sidebar"></i> Public Site Navigation</h3>
+          <div id="site-nav-list"></div>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-layout-text-window"></i> Public Sections</h3>
+          <div id="site-sections-list"></div>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-kanban"></i> Project UI Labels</h3>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label" for="site-project-all">All Filter Label</label>
+              <input type="text" class="form-control" id="site-project-all">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-project-view">Card Hover Label</label>
+              <input type="text" class="form-control" id="site-project-view">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-project-tech">Technologies Title</label>
+              <input type="text" class="form-control" id="site-project-tech">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-project-highlights">Highlights Title</label>
+              <input type="text" class="form-control" id="site-project-highlights">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-project-live">Live Link Label</label>
+              <input type="text" class="form-control" id="site-project-live">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-project-source">Source Link Label</label>
+              <input type="text" class="form-control" id="site-project-source">
+            </div>
+          </div>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-envelope-paper"></i> Contact UI Labels</h3>
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label" for="site-contact-address-title">Address Box</label>
+              <input type="text" class="form-control" id="site-contact-address-title">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="site-contact-social-title">Social Box</label>
+              <input type="text" class="form-control" id="site-contact-social-title">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="site-contact-email-title">Email Box</label>
+              <input type="text" class="form-control" id="site-contact-email-title">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="site-contact-phone-title">Phone Box</label>
+              <input type="text" class="form-control" id="site-contact-phone-title">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-form-name">Name Placeholder</label>
+              <input type="text" class="form-control" id="site-form-name">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-form-email">Email Placeholder</label>
+              <input type="text" class="form-control" id="site-form-email">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-form-subject">Subject Placeholder</label>
+              <input type="text" class="form-control" id="site-form-subject">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-form-message">Message Placeholder</label>
+              <input type="text" class="form-control" id="site-form-message">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-form-submit">Submit Label</label>
+              <input type="text" class="form-control" id="site-form-submit">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-form-sending">Sending Label</label>
+              <input type="text" class="form-control" id="site-form-sending">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-form-loading">Loading Label</label>
+              <input type="text" class="form-control" id="site-form-loading">
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="site-form-sent">Success Message</label>
+              <input type="text" class="form-control" id="site-form-sent">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="site-form-success-fallback">Fallback Success Message</label>
+              <input type="text" class="form-control" id="site-form-success-fallback">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="site-form-error-fallback">Fallback Error Message</label>
+              <input type="text" class="form-control" id="site-form-error-fallback">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-captcha-title">Captcha Title</label>
+              <input type="text" class="form-control" id="site-captcha-title">
+            </div>
+            <div class="col-md-8">
+              <label class="form-label" for="site-captcha-intro">Captcha Intro</label>
+              <input type="text" class="form-control" id="site-captcha-intro">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="site-captcha-question">Captcha Question</label>
+              <input type="text" class="form-control" id="site-captcha-question">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="site-captcha-error">Captcha Error</label>
+              <input type="text" class="form-control" id="site-captcha-error">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="site-captcha-close">Captcha Close Label</label>
+              <input type="text" class="form-control" id="site-captcha-close">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="site-captcha-submit">Captcha Submit Label</label>
+              <input type="text" class="form-control" id="site-captcha-submit">
+            </div>
+          </div>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-chat-quote"></i> Testimonials Source</h3>
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label" for="site-testimonials-source">Google Sheets / JSON Source URL</label>
+              <input type="text" class="form-control" id="site-testimonials-source" placeholder="https://...">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site-testimonials-placeholder">Placeholder Image</label>
+              <input type="text" class="form-control" id="site-testimonials-placeholder" placeholder="assets/img/testimonials/placeholder.png">
+            </div>
+          </div>
+          <button class="btn btn-accent mt-3" data-action="saveSite"><i class="bi bi-save"></i> Save Public Site</button>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-envelope-gear"></i> Email SMTP Settings</h3>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="s-email-host">SMTP Host</label>
+              <input type="text" class="form-control" id="s-email-host" placeholder="smtp.example.com">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="s-email-port">Port</label>
+              <input type="number" min="1" max="65535" class="form-control" id="s-email-port" placeholder="465">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="s-email-secure">Security</label>
+              <select class="form-select" id="s-email-secure">
+                <option value="true">TLS/SSL</option>
+                <option value="false">STARTTLS / Plain</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="s-email-user">SMTP Username</label>
+              <input type="text" class="form-control" id="s-email-user" autocomplete="off">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="s-email-password">SMTP Password</label>
+              <input type="password" class="form-control" id="s-email-password" autocomplete="new-password" placeholder="Leave blank to keep current password">
+              <div id="s-email-password-state" class="form-text"></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="s-email-from">From Address</label>
+              <input type="email" class="form-control" id="s-email-from">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="s-email-to">Recipient Address</label>
+              <input type="email" class="form-control" id="s-email-to">
+            </div>
+          </div>
+          <button class="btn btn-accent mt-3" data-action="saveSettings"><i class="bi bi-save"></i> Save SMTP Settings</button>
+        </div>
+
+        <div class="editor-card">
+          <h3><i class="bi bi-key"></i> Admin Password Reset</h3>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label" for="s-current-password">Current Password</label>
+              <input type="password" class="form-control" id="s-current-password" autocomplete="current-password">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="s-new-password">New Password</label>
+              <input type="password" class="form-control" id="s-new-password" autocomplete="new-password">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="s-confirm-password">Confirm New Password</label>
+              <input type="password" class="form-control" id="s-confirm-password" autocomplete="new-password">
+            </div>
+          </div>
+          <button class="btn btn-outline-accent mt-3" data-action="changePassword"><i class="bi bi-key-fill"></i> Update Password</button>
+        </div>
+      </div>
+
       </div><!-- .section-panels-wrap -->
 
     <!-- Project Editor Modal -->
@@ -458,8 +714,20 @@
                 <input type="text" class="form-control" id="pe-technologies" placeholder="Node.js, React, MongoDB">
               </div>
               <div class="col-12">
-                <label class="form-label">Image Path</label>
-                <input type="text" class="form-control" id="pe-image" placeholder="assets/img/projects/my-project.png">
+                <div class="image-control">
+                  <label class="form-label" for="pe-image">Image URL or Path</label>
+                  <input type="text" class="form-control mb-2" id="pe-image" placeholder="assets/img/projects/my-project.png or https://...">
+                  <div class="row g-2 align-items-end">
+                    <div class="col-md-8">
+                      <label class="form-label" for="pe-image-file">Upload Project Image</label>
+                      <input type="file" class="form-control" id="pe-image-file" accept="image/png,image/jpeg,image/webp,image/gif">
+                    </div>
+                    <div class="col-md-4">
+                      <button class="btn btn-outline-accent w-100" data-action="uploadProjectImage" type="button"><i class="bi bi-upload"></i> Upload</button>
+                    </div>
+                  </div>
+                  <img id="pe-image-preview" class="image-preview mt-3" alt="Project image preview">
+                </div>
               </div>
               <div class="col-6">
                 <label class="form-label">Live URL</label>

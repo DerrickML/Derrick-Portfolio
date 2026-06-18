@@ -18,23 +18,232 @@ document.addEventListener('DOMContentLoaded', async function () {
     return e;
   }
 
-  // Fetch JSON from our API
-  async function fetchSection(section) {
+  function sanitizeUrl(url) {
     try {
-      const res = await fetch(`/api/portfolio/${section}`);
+      const parsed = new URL(url, window.location.origin);
+      if (['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol)) {
+        return parsed.href;
+      }
+    } catch (err) {
+      return '';
+    }
+    return '';
+  }
+
+  function sanitizeAssetUrl(url) {
+    try {
+      const parsed = new URL(url, window.location.origin);
+      if (['http:', 'https:'].includes(parsed.protocol)) {
+        return parsed.href;
+      }
+    } catch (err) {
+      return '';
+    }
+    return '';
+  }
+
+  function setBackgroundImage(imagePath) {
+    const safeUrl = sanitizeAssetUrl(imagePath);
+    if (!safeUrl) return;
+    document.documentElement.style.setProperty(
+      '--site-background-image',
+      `url("${safeUrl.replace(/"/g, '%22')}")`,
+    );
+  }
+
+  function loadAnalytics(measurementId) {
+    const id = (measurementId || '').trim();
+    if (!id || !/^G-[A-Z0-9-]+$/i.test(id) || document.querySelector(`script[data-ga-id="${id}"]`)) {
+      return;
+    }
+
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+    window.gtag('js', new Date());
+    window.gtag('config', id);
+
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`;
+    script.dataset.gaId = id;
+    document.head.appendChild(script);
+  }
+
+  function setSectionTitle(containerSelector, config) {
+    const container = document.querySelector(containerSelector);
+    if (!container || !config) return;
+    const title = container.querySelector('.section-title h2');
+    const subtitle = container.querySelector('.section-title p');
+    if (title) title.textContent = config.title || '';
+    if (subtitle) {
+      subtitle.textContent = config.subtitle || '';
+      subtitle.style.display = config.subtitle ? '' : 'none';
+    }
+  }
+
+  function toggleElement(selector, enabled) {
+    const element = document.querySelector(selector);
+    if (element) element.style.display = enabled ? '' : 'none';
+  }
+
+  function applyNavigation(site) {
+    const sections = site?.sections || {};
+    (site?.navigation || []).forEach(item => {
+      const link = document.querySelector(`#navbar a[href="${item.href}"]`);
+      if (!link) return;
+      const targetId = (item.href || '').replace('#', '');
+      const targetEnabled = targetId === 'header' || sections[targetId]?.enabled !== false;
+      link.textContent = item.label || link.textContent;
+      link.closest('li').style.display = item.enabled !== false && targetEnabled ? '' : 'none';
+    });
+  }
+
+  function applyPublicSite(site) {
+    if (!site) return;
+    const sections = site.sections || {};
+    applyNavigation(site);
+
+    setSectionTitle('#about .about-me', sections.about);
+    setSectionTitle('#about .skills', sections.skills);
+    setSectionTitle('#about .interests', sections.interests);
+    setSectionTitle('#about .testimonials', sections.testimonials);
+    setSectionTitle('#resume', sections.resume);
+    setSectionTitle('#projects', sections.projects);
+    setSectionTitle('#contact', sections.contact);
+
+    toggleElement('#about .about-me', sections.about?.enabled !== false);
+    toggleElement('#about .skills', sections.skills?.enabled !== false);
+    toggleElement('#about .interests', sections.interests?.enabled !== false);
+    toggleElement('#about .testimonials', sections.testimonials?.enabled !== false);
+    toggleElement('#resume', sections.resume?.enabled !== false);
+    toggleElement('#projects', sections.projects?.enabled !== false);
+    toggleElement('#contact', sections.contact?.enabled !== false);
+
+    const contactBoxes = site.contactBoxes || {};
+    const contactForm = site.contactForm || {};
+    const contactTitleMap = {
+      'contact-address-title': contactBoxes.addressTitle,
+      'contact-social-title': contactBoxes.socialTitle,
+      'contact-email-title': contactBoxes.emailTitle,
+      'contact-phone-title': contactBoxes.phoneTitle,
+    };
+    Object.entries(contactTitleMap).forEach(([id, value]) => {
+      const target = document.getElementById(id);
+      if (target && value) target.textContent = value;
+    });
+
+    const formPlaceholders = {
+      name: contactForm.namePlaceholder,
+      email: contactForm.emailPlaceholder,
+      subject: contactForm.subjectPlaceholder,
+      message: contactForm.messagePlaceholder,
+    };
+    Object.entries(formPlaceholders).forEach(([id, value]) => {
+      const input = document.getElementById(id);
+      if (!input || !value) return;
+      input.placeholder = value;
+      const label = document.querySelector(`label[for="${id}"]`);
+      if (label) label.textContent = value;
+    });
+
+    const submitButton = document.getElementById('submitButton');
+    if (submitButton && contactForm.submitLabel) {
+      submitButton.textContent = contactForm.submitLabel;
+      submitButton.dataset.submitLabel = contactForm.submitLabel;
+    }
+    if (submitButton && contactForm.sendingLabel) {
+      submitButton.dataset.sendingLabel = contactForm.sendingLabel;
+    }
+    const loading = document.querySelector('#contact-form .loading');
+    if (loading && contactForm.loadingLabel) loading.textContent = contactForm.loadingLabel;
+    const sent = document.querySelector('#contact-form .sent-message');
+    if (sent && contactForm.sentMessage) sent.textContent = contactForm.sentMessage;
+
+    const contactFormEl = document.getElementById('contact-form');
+    if (contactFormEl) {
+      contactFormEl.dataset.successFallback = contactForm.successFallback || '';
+      contactFormEl.dataset.errorFallback = contactForm.errorFallback || '';
+    }
+
+    const captchaMap = {
+      captchaModalLabel: contactForm.captchaTitle,
+      captchaIntro: contactForm.captchaIntro,
+      captchaQuestion: contactForm.captchaQuestion,
+      captchaClose: contactForm.captchaCloseLabel,
+      checkCaptcha: contactForm.captchaSubmitLabel,
+    };
+    Object.entries(captchaMap).forEach(([id, value]) => {
+      const target = document.getElementById(id);
+      if (target && value) target.textContent = value;
+    });
+    const captchaAnswer = document.getElementById('captchaAnswer');
+    if (captchaAnswer) {
+      captchaAnswer.dataset.incorrectMessage = contactForm.captchaIncorrectMessage || '';
+    }
+  }
+
+  function setLimitedHtml(target, html) {
+    const allowedTags = new Set(['A', 'BR', 'EM', 'SPAN', 'STRONG', 'SUP']);
+    const template = document.createElement('template');
+    template.innerHTML = html || '';
+
+    function cleanNode(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return document.createTextNode(node.textContent);
+      }
+
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        return document.createTextNode('');
+      }
+
+      if (!allowedTags.has(node.tagName)) {
+        const fragment = document.createDocumentFragment();
+        node.childNodes.forEach(child => fragment.appendChild(cleanNode(child)));
+        return fragment;
+      }
+
+      const clean = document.createElement(node.tagName.toLowerCase());
+      if (node.tagName === 'A') {
+        const href = sanitizeUrl(node.getAttribute('href') || '');
+        if (href) {
+          clean.href = href;
+          if (clean.protocol === 'http:' || clean.protocol === 'https:') {
+            clean.target = '_blank';
+            clean.rel = 'noopener noreferrer';
+          }
+        }
+      }
+      node.childNodes.forEach(child => clean.appendChild(cleanNode(child)));
+      return clean;
+    }
+
+    const fragment = document.createDocumentFragment();
+    template.content.childNodes.forEach(child => fragment.appendChild(cleanNode(child)));
+    target.replaceChildren(fragment);
+  }
+
+  // Fetch JSON from our API
+  async function fetchJson(url) {
+    try {
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch (err) {
-      console.error(`Error loading ${section}:`, err);
+      console.error(`Error loading ${url}:`, err);
       return null;
     }
+  }
+
+  async function fetchSection(section) {
+    return fetchJson(`/api/portfolio/${section}`);
   }
 
   // ──────────────────────────────────────────────
   // 1. PROFILE (Header + About)
   // ──────────────────────────────────────────────
-  function renderProfile(data) {
+  function renderProfile(data, settings) {
     if (!data) return;
+    const configuredProfileImage = settings?.images?.profileImage;
 
     // Header name
     const headerName = document.getElementById('header-name');
@@ -42,7 +251,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     // Header tagline (contains safe HTML markup like <span>)
     const headerTagline = document.getElementById('header-tagline');
-    if (headerTagline) headerTagline.innerHTML = data.tagline;
+    if (headerTagline) setLimitedHtml(headerTagline, data.tagline);
 
     // About title
     const aboutTitle = document.getElementById('about-title');
@@ -50,12 +259,12 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     // About text (contains safe internal HTML with <a> links)
     const aboutText = document.getElementById('about-text');
-    if (aboutText) aboutText.innerHTML = data.aboutText;
+    if (aboutText) setLimitedHtml(aboutText, data.aboutText);
 
     // Profile image
     const profileImg = document.getElementById('profile-image');
     if (profileImg) {
-      profileImg.src = data.profileImage;
+      profileImg.src = configuredProfileImage || data.profileImage;
       profileImg.alt = data.name;
     }
 
@@ -70,7 +279,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const strong = el('strong', null, detail.label + ':');
         const span = document.createElement('span');
         // Details may contain safe HTML (e.g., email links, <sup>)
-        span.innerHTML = detail.value;
+        setLimitedHtml(span, detail.value);
         li.appendChild(icon);
         li.appendChild(document.createTextNode(' '));
         li.appendChild(strong);
@@ -85,12 +294,17 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (headerSocial && data.socialLinks) {
       headerSocial.innerHTML = '';
       data.socialLinks.forEach(link => {
+        const href = sanitizeUrl(link.url);
+        if (!href) return;
         const a = document.createElement('a');
-        a.href = link.url;
+        a.href = href;
         a.className = link.platform;
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
+        a.setAttribute('aria-label', link.platform || 'Social profile');
+        a.title = link.platform || 'Social profile';
         const i = el('i', link.icon);
+        i.setAttribute('aria-hidden', 'true');
         a.appendChild(i);
         headerSocial.appendChild(a);
       });
@@ -316,12 +530,17 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (socialEl && data.socialLinks) {
       socialEl.innerHTML = '';
       data.socialLinks.forEach(link => {
+        const href = sanitizeUrl(link.url);
+        if (!href) return;
         const a = document.createElement('a');
-        a.href = link.url;
+        a.href = href;
         a.className = link.platform;
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
+        a.setAttribute('aria-label', link.platform || 'Social profile');
+        a.title = link.platform || 'Social profile';
         const i = el('i', link.icon);
+        i.setAttribute('aria-hidden', 'true');
         a.appendChild(i);
         socialEl.appendChild(a);
       });
@@ -331,7 +550,9 @@ document.addEventListener('DOMContentLoaded', async function () {
   // ──────────────────────────────────────────────
   // FETCH ALL DATA & RENDER
   // ──────────────────────────────────────────────
-  const [profile, skills, interests, resume, contact] = await Promise.all([
+  const [settings, site, profile, skills, interests, resume, contact] = await Promise.all([
+    fetchJson('/api/settings/public'),
+    fetchJson('/api/site'),
     fetchSection('profile'),
     fetchSection('skills'),
     fetchSection('interests'),
@@ -339,7 +560,10 @@ document.addEventListener('DOMContentLoaded', async function () {
     fetchSection('contact'),
   ]);
 
-  renderProfile(profile);
+  if (settings?.images?.backgroundImage) setBackgroundImage(settings.images.backgroundImage);
+  if (settings?.analytics?.googleMeasurementId) loadAnalytics(settings.analytics.googleMeasurementId);
+  applyPublicSite(site);
+  renderProfile(profile, settings);
   renderSkills(skills);
   renderInterests(interests);
   renderResume(resume);

@@ -8,7 +8,10 @@
 // STATE
 // ──────────────────────────────────────────
 let currentData = {};
+let currentSettings = {};
+let currentSite = {};
 const sortableInstances = [];
+const siteSectionOrder = ['about', 'skills', 'interests', 'testimonials', 'resume', 'projects', 'contact'];
 
 // ──────────────────────────────────────────
 // UTILITY
@@ -29,6 +32,34 @@ async function apiCall(url, method, body) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
+}
+
+async function uploadImage(file, type) {
+  if (!file) throw new Error('Choose an image file first');
+  if (!file.type || !file.type.startsWith('image/')) {
+    throw new Error('Only image files can be uploaded');
+  }
+
+  const res = await fetch(`/api/admin/uploads/${type}`, {
+    method: 'POST',
+    headers: { 'Content-Type': file.type },
+    body: file,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Upload failed');
+  return data.path;
+}
+
+function setImagePreview(previewId, imagePath) {
+  const preview = document.getElementById(previewId);
+  if (!preview) return;
+  if (imagePath) {
+    preview.src = imagePath;
+    preview.classList.add('visible');
+  } else {
+    preview.removeAttribute('src');
+    preview.classList.remove('visible');
+  }
 }
 
 // ──────────────────────────────────────────
@@ -115,6 +146,11 @@ document.addEventListener('click', (e) => {
     case 'editProject': openProjectEditor(parseInt(actionBtn.dataset.index)); break;
     case 'deleteProject': deleteProject(parseInt(actionBtn.dataset.index)); break;
     case 'save': saveSection(actionBtn.dataset.section); break;
+    case 'saveSettings': saveSettings(); break;
+    case 'saveSite': saveSite(); break;
+    case 'changePassword': changePassword(); break;
+    case 'uploadSettingImage': uploadSettingImage(actionBtn); break;
+    case 'uploadProjectImage': uploadProjectImage(); break;
   }
 });
 
@@ -129,6 +165,15 @@ document.addEventListener('input', (e) => {
     const colorPicker = e.target.previousElementSibling;
     if (colorPicker) colorPicker.value = e.target.value;
   }
+  if (e.target.id === 's-bg-image') {
+    setImagePreview('s-bg-preview', e.target.value);
+  }
+  if (e.target.id === 's-profile-image') {
+    setImagePreview('s-profile-preview', e.target.value);
+  }
+  if (e.target.id === 'pe-image') {
+    setImagePreview('pe-image-preview', e.target.value);
+  }
 });
 
 // ──────────────────────────────────────────
@@ -137,14 +182,22 @@ document.addEventListener('input', (e) => {
 async function loadAllData() {
   try {
     const sections = ['profile', 'skills', 'interests', 'resume', 'contact', 'projects'];
-    const results = await Promise.all(sections.map(s => apiCall(`/api/portfolio/${s}`, 'GET')));
+    const results = await Promise.all([
+      ...sections.map(s => apiCall(`/api/portfolio/${s}`, 'GET')),
+      apiCall('/api/admin/settings', 'GET'),
+      apiCall('/api/admin/site', 'GET'),
+    ]);
     sections.forEach((s, i) => currentData[s] = results[i]);
+    currentSettings = results[sections.length];
+    currentSite = results[sections.length + 1];
     populateProfile(currentData.profile);
     populateSkills(currentData.skills);
     populateInterests(currentData.interests);
     populateResume(currentData.resume);
     populateContact(currentData.contact);
     populateProjects(currentData.projects);
+    populateSettings(currentSettings);
+    populateSite(currentSite);
     initSortable();
   } catch (err) {
     showToast('Error loading data: ' + err.message, true);
@@ -280,6 +333,288 @@ function collectContact() {
     phones: collectDynamicItems('c-phones-list', ['number', 'tel']),
     socialLinks: collectDynamicItems('c-social-list', ['platform', 'url', 'icon']),
   };
+}
+
+// ──────────────────────────────────────────
+// SETTINGS + PUBLIC SITE CONFIG
+// ──────────────────────────────────────────
+function populateSettings(settings) {
+  const email = settings.email || {};
+  const images = settings.images || {};
+  const analytics = settings.analytics || {};
+
+  document.getElementById('s-email-host').value = email.host || '';
+  document.getElementById('s-email-port').value = email.port || '';
+  document.getElementById('s-email-secure').value = String(email.secure !== false);
+  document.getElementById('s-email-user').value = email.user || '';
+  document.getElementById('s-email-password').value = '';
+  document.getElementById('s-email-password-state').textContent = email.passwordSet
+    ? 'A password is configured. Leave blank to keep it.'
+    : 'No SMTP password is configured.';
+  document.getElementById('s-email-from').value = email.from || '';
+  document.getElementById('s-email-to').value = email.to || '';
+
+  document.getElementById('s-bg-image').value = images.backgroundImage || '';
+  document.getElementById('s-profile-image').value = images.profileImage || '';
+  document.getElementById('s-ga-id').value = analytics.googleMeasurementId || '';
+  setImagePreview('s-bg-preview', images.backgroundImage || '');
+  setImagePreview('s-profile-preview', images.profileImage || '');
+}
+
+function collectSettings() {
+  return {
+    email: {
+      host: document.getElementById('s-email-host').value,
+      port: document.getElementById('s-email-port').value,
+      secure: document.getElementById('s-email-secure').value === 'true',
+      user: document.getElementById('s-email-user').value,
+      password: document.getElementById('s-email-password').value,
+      from: document.getElementById('s-email-from').value,
+      to: document.getElementById('s-email-to').value,
+    },
+    images: {
+      backgroundImage: document.getElementById('s-bg-image').value,
+      profileImage: document.getElementById('s-profile-image').value,
+    },
+    analytics: {
+      googleMeasurementId: document.getElementById('s-ga-id').value,
+    },
+  };
+}
+
+async function saveSettings() {
+  try {
+    const result = await apiCall('/api/admin/settings', 'PUT', collectSettings());
+    currentSettings = result.settings || currentSettings;
+    populateSettings(currentSettings);
+    showToast('Settings saved successfully!');
+  } catch (err) {
+    showToast('Error saving settings: ' + err.message, true);
+  }
+}
+
+function populateSite(site) {
+  currentSite = site || {};
+  renderSiteNavigation(currentSite.navigation || []);
+  renderSiteSections(currentSite.sections || {});
+
+  const contactBoxes = currentSite.contactBoxes || {};
+  const contactForm = currentSite.contactForm || {};
+  const projects = currentSite.projects || {};
+  const testimonials = currentSite.testimonials || {};
+
+  document.getElementById('site-contact-address-title').value = contactBoxes.addressTitle || '';
+  document.getElementById('site-contact-social-title').value = contactBoxes.socialTitle || '';
+  document.getElementById('site-contact-email-title').value = contactBoxes.emailTitle || '';
+  document.getElementById('site-contact-phone-title').value = contactBoxes.phoneTitle || '';
+  document.getElementById('site-form-name').value = contactForm.namePlaceholder || '';
+  document.getElementById('site-form-email').value = contactForm.emailPlaceholder || '';
+  document.getElementById('site-form-subject').value = contactForm.subjectPlaceholder || '';
+  document.getElementById('site-form-message').value = contactForm.messagePlaceholder || '';
+  document.getElementById('site-form-submit').value = contactForm.submitLabel || '';
+  document.getElementById('site-form-sending').value = contactForm.sendingLabel || '';
+  document.getElementById('site-form-loading').value = contactForm.loadingLabel || '';
+  document.getElementById('site-form-sent').value = contactForm.sentMessage || '';
+  document.getElementById('site-form-success-fallback').value = contactForm.successFallback || '';
+  document.getElementById('site-form-error-fallback').value = contactForm.errorFallback || '';
+  document.getElementById('site-captcha-title').value = contactForm.captchaTitle || '';
+  document.getElementById('site-captcha-intro').value = contactForm.captchaIntro || '';
+  document.getElementById('site-captcha-question').value = contactForm.captchaQuestion || '';
+  document.getElementById('site-captcha-error').value = contactForm.captchaIncorrectMessage || '';
+  document.getElementById('site-captcha-close').value = contactForm.captchaCloseLabel || '';
+  document.getElementById('site-captcha-submit').value = contactForm.captchaSubmitLabel || '';
+
+  document.getElementById('site-project-all').value = projects.allFilterLabel || '';
+  document.getElementById('site-project-view').value = projects.viewDetailsLabel || '';
+  document.getElementById('site-project-tech').value = projects.technologiesTitle || '';
+  document.getElementById('site-project-highlights').value = projects.highlightsTitle || '';
+  document.getElementById('site-project-live').value = projects.liveDemoLabel || '';
+  document.getElementById('site-project-source').value = projects.sourceCodeLabel || '';
+
+  document.getElementById('site-testimonials-source').value = testimonials.sourceUrl || '';
+  document.getElementById('site-testimonials-placeholder').value = testimonials.placeholderImage || '';
+}
+
+function renderSiteNavigation(navigation) {
+  const list = document.getElementById('site-nav-list');
+  list.innerHTML = '';
+  navigation.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'setting-row site-nav-item';
+    div.dataset.id = item.id || '';
+    div.dataset.href = item.href || '#';
+    div.innerHTML = `
+      <div class="row g-3 align-items-end">
+        <div class="col-md-2">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" data-field="enabled" ${item.enabled !== false ? 'checked' : ''}>
+            <label class="form-check-label form-label">Enabled</label>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Nav Label</label>
+          <input type="text" class="form-control" data-field="label" value="${escHtml(item.label || '')}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Target</label>
+          <input type="text" class="form-control" value="${escHtml(item.href || '')}" disabled>
+        </div>
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+function renderSiteSections(sections) {
+  const list = document.getElementById('site-sections-list');
+  list.innerHTML = '';
+  siteSectionOrder.forEach(key => {
+    const section = sections[key] || {};
+    const div = document.createElement('div');
+    div.className = 'setting-row site-section-item';
+    div.dataset.key = key;
+    div.innerHTML = `
+      <div class="row g-3 align-items-end">
+        <div class="col-md-2">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" data-field="enabled" ${section.enabled !== false ? 'checked' : ''}>
+            <label class="form-check-label form-label">Enabled</label>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">${escHtml(key)} Title</label>
+          <input type="text" class="form-control" data-field="title" value="${escHtml(section.title || '')}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Subtitle</label>
+          <input type="text" class="form-control" data-field="subtitle" value="${escHtml(section.subtitle || '')}">
+        </div>
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+function collectSite() {
+  const navigation = Array.from(document.querySelectorAll('#site-nav-list .site-nav-item')).map(item => ({
+    id: item.dataset.id,
+    href: item.dataset.href,
+    enabled: item.querySelector('[data-field="enabled"]').checked,
+    label: item.querySelector('[data-field="label"]').value,
+  }));
+
+  const sections = {};
+  document.querySelectorAll('#site-sections-list .site-section-item').forEach(item => {
+    sections[item.dataset.key] = {
+      enabled: item.querySelector('[data-field="enabled"]').checked,
+      title: item.querySelector('[data-field="title"]').value,
+      subtitle: item.querySelector('[data-field="subtitle"]').value,
+    };
+  });
+
+  return {
+    navigation,
+    sections,
+    contactBoxes: {
+      addressTitle: document.getElementById('site-contact-address-title').value,
+      socialTitle: document.getElementById('site-contact-social-title').value,
+      emailTitle: document.getElementById('site-contact-email-title').value,
+      phoneTitle: document.getElementById('site-contact-phone-title').value,
+    },
+    contactForm: {
+      namePlaceholder: document.getElementById('site-form-name').value,
+      emailPlaceholder: document.getElementById('site-form-email').value,
+      subjectPlaceholder: document.getElementById('site-form-subject').value,
+      messagePlaceholder: document.getElementById('site-form-message').value,
+      submitLabel: document.getElementById('site-form-submit').value,
+      sendingLabel: document.getElementById('site-form-sending').value,
+      loadingLabel: document.getElementById('site-form-loading').value,
+      sentMessage: document.getElementById('site-form-sent').value,
+      successFallback: document.getElementById('site-form-success-fallback').value,
+      errorFallback: document.getElementById('site-form-error-fallback').value,
+      captchaTitle: document.getElementById('site-captcha-title').value,
+      captchaIntro: document.getElementById('site-captcha-intro').value,
+      captchaQuestion: document.getElementById('site-captcha-question').value,
+      captchaIncorrectMessage: document.getElementById('site-captcha-error').value,
+      captchaCloseLabel: document.getElementById('site-captcha-close').value,
+      captchaSubmitLabel: document.getElementById('site-captcha-submit').value,
+    },
+    projects: {
+      allFilterLabel: document.getElementById('site-project-all').value,
+      viewDetailsLabel: document.getElementById('site-project-view').value,
+      technologiesTitle: document.getElementById('site-project-tech').value,
+      highlightsTitle: document.getElementById('site-project-highlights').value,
+      liveDemoLabel: document.getElementById('site-project-live').value,
+      sourceCodeLabel: document.getElementById('site-project-source').value,
+    },
+    testimonials: {
+      sourceUrl: document.getElementById('site-testimonials-source').value,
+      placeholderImage: document.getElementById('site-testimonials-placeholder').value,
+    },
+  };
+}
+
+async function saveSite() {
+  try {
+    const result = await apiCall('/api/admin/site', 'PUT', collectSite());
+    currentSite = result.site || currentSite;
+    populateSite(currentSite);
+    showToast('Public site saved successfully!');
+  } catch (err) {
+    showToast('Error saving public site: ' + err.message, true);
+  }
+}
+
+async function changePassword() {
+  const currentPassword = document.getElementById('s-current-password').value;
+  const newPassword = document.getElementById('s-new-password').value;
+  const confirmPassword = document.getElementById('s-confirm-password').value;
+
+  if (newPassword !== confirmPassword) {
+    showToast('New passwords do not match', true);
+    return;
+  }
+  if (newPassword.length < 12) {
+    showToast('New password must be at least 12 characters', true);
+    return;
+  }
+
+  try {
+    await apiCall('/api/admin/password', 'POST', { currentPassword, newPassword });
+    document.getElementById('s-current-password').value = '';
+    document.getElementById('s-new-password').value = '';
+    document.getElementById('s-confirm-password').value = '';
+    showToast('Password updated successfully!');
+  } catch (err) {
+    showToast('Error updating password: ' + err.message, true);
+  }
+}
+
+async function uploadSettingImage(button) {
+  const fileInput = document.getElementById(button.dataset.file);
+  const targetInput = document.getElementById(button.dataset.target);
+  const previewId = button.dataset.preview;
+  try {
+    const path = await uploadImage(fileInput.files[0], button.dataset.type);
+    targetInput.value = path;
+    setImagePreview(previewId, path);
+    fileInput.value = '';
+    showToast('Image uploaded successfully!');
+  } catch (err) {
+    showToast('Upload error: ' + err.message, true);
+  }
+}
+
+async function uploadProjectImage() {
+  const fileInput = document.getElementById('pe-image-file');
+  const targetInput = document.getElementById('pe-image');
+  try {
+    const path = await uploadImage(fileInput.files[0], 'project');
+    targetInput.value = path;
+    setImagePreview('pe-image-preview', path);
+    fileInput.value = '';
+    showToast('Project image uploaded successfully!');
+  } catch (err) {
+    showToast('Upload error: ' + err.message, true);
+  }
 }
 
 // ──────────────────────────────────────────
@@ -631,6 +966,8 @@ function openProjectEditor(index) {
   document.getElementById('pe-fullDescription').value = d.fullDescription || '';
   document.getElementById('pe-technologies').value = (d.technologies || []).join(', ');
   document.getElementById('pe-image').value = d.image || '';
+  document.getElementById('pe-image-file').value = '';
+  setImagePreview('pe-image-preview', d.image || '');
   document.getElementById('pe-liveUrl').value = d.liveUrl || '';
   document.getElementById('pe-repoUrl').value = d.repoUrl || '';
   document.getElementById('pe-highlights').value = (d.highlights || []).join('\n');
@@ -652,7 +989,7 @@ async function saveProjectFromModal() {
     description: document.getElementById('pe-description').value,
     fullDescription: document.getElementById('pe-fullDescription').value,
     technologies: document.getElementById('pe-technologies').value.split(',').map(t => t.trim()).filter(Boolean),
-    image: document.getElementById('pe-image').value,
+    image: document.getElementById('pe-image').value.trim(),
     liveUrl: document.getElementById('pe-liveUrl').value,
     repoUrl: document.getElementById('pe-repoUrl').value,
     highlights: document.getElementById('pe-highlights').value.split('\n').filter(b => b.trim()),

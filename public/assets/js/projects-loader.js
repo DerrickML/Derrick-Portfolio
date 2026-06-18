@@ -4,19 +4,31 @@
  */
 document.addEventListener('DOMContentLoaded', function () {
   let allProjects = [];
+  let siteLabels = {};
 
-  fetch('/api/portfolio/projects')
-    .then(res => res.json())
-    .then(data => {
-      allProjects = data;
-      renderFilters(data);
-      renderCards(data);
+  Promise.all([
+    fetch('/api/portfolio/projects').then(res => res.json()),
+    fetch('/api/site').then(res => res.ok ? res.json() : null).catch(() => null),
+  ])
+    .then(([projects, site]) => {
+      allProjects = Array.isArray(projects) ? projects : [];
+      siteLabels = site?.projects || {};
+      renderFilters(allProjects);
+      renderCards(allProjects);
     })
     .catch(err => console.error('Error loading projects:', err));
 
   // ─── FILTERS ─────────────────────────────────
   function renderFilters(projects) {
     const container = document.getElementById('projects-filters');
+    container.innerHTML = '';
+
+    const allBtn = document.createElement('button');
+    allBtn.className = 'filter-btn active';
+    allBtn.dataset.filter = '*';
+    allBtn.textContent = siteLabels.allFilterLabel || 'All';
+    container.appendChild(allBtn);
+
     // Gather unique categories
     const categories = [...new Set(projects.map(p => p.category).filter(Boolean))];
 
@@ -107,7 +119,7 @@ document.addEventListener('DOMContentLoaded', function () {
       overlay.className = 'card-img-overlay';
       const viewHint = document.createElement('span');
       viewHint.className = 'view-hint';
-      viewHint.textContent = '→ View Details';
+      viewHint.textContent = siteLabels.viewDetailsLabel || 'View Details';
       overlay.appendChild(viewHint);
       imgWrap.appendChild(overlay);
       card.appendChild(imgWrap);
@@ -241,6 +253,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const techWrap = document.getElementById('pm-tech-wrap');
     techContainer.innerHTML = '';
     if (project.technologies && project.technologies.length > 0) {
+      const techTitle = techWrap.querySelector('h6');
+      if (techTitle) {
+        techTitle.innerHTML = '';
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-cpu';
+        techTitle.appendChild(icon);
+        techTitle.appendChild(document.createTextNode(' ' + (siteLabels.technologiesTitle || 'Technologies')));
+      }
       project.technologies.forEach(t => {
         const pill = document.createElement('span');
         pill.className = 'tech-pill';
@@ -257,6 +277,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const highlightsWrap = document.getElementById('pm-highlights-wrap');
     highlightsList.innerHTML = '';
     if (project.highlights && project.highlights.length > 0) {
+      const highlightsTitle = highlightsWrap.querySelector('h6');
+      if (highlightsTitle) {
+        highlightsTitle.innerHTML = '';
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-star';
+        highlightsTitle.appendChild(icon);
+        highlightsTitle.appendChild(document.createTextNode(' ' + (siteLabels.highlightsTitle || 'Key Highlights')));
+      }
       project.highlights.forEach(h => {
         const li = document.createElement('li');
         li.textContent = h;
@@ -277,7 +305,7 @@ document.addEventListener('DOMContentLoaded', function () {
       a.rel = 'noopener noreferrer';
       a.className = 'pm-link-live';
       a.innerHTML = '<i class="bi bi-globe"></i>';
-      a.appendChild(document.createTextNode(' Live Demo'));
+      a.appendChild(document.createTextNode(' ' + (siteLabels.liveDemoLabel || 'Live Demo')));
       linksContainer.appendChild(a);
     }
     if (project.repoUrl) {
@@ -287,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function () {
       a.rel = 'noopener noreferrer';
       a.className = 'pm-link-repo';
       a.innerHTML = '<i class="bi bi-github"></i>';
-      a.appendChild(document.createTextNode(' Source Code'));
+      a.appendChild(document.createTextNode(' ' + (siteLabels.sourceCodeLabel || 'Source Code')));
       linksContainer.appendChild(a);
     }
 

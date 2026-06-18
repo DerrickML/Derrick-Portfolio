@@ -14,7 +14,7 @@
       "MQTT",
       "MongoDB"
     ],
-    "image": "assets/img/projects/smart-irrigation.png",
+    "image": "",
     "liveUrl": "",
     "repoUrl": "https://github.com/DerrickML/smart-irrigation",
     "startDate": "2023-06",
@@ -41,7 +41,7 @@
       "CSS3",
       "HTML5"
     ],
-    "image": "assets/img/projects/portfolio.png",
+    "image": "",
     "liveUrl": "https://derrickml.com",
     "repoUrl": "https://github.com/DerrickML/Derrick-Portfolio",
     "startDate": "2024-08",

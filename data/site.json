@@ -1,0 +1,107 @@
+{
+  "navigation": [
+    {
+      "id": "home",
+      "label": "Home",
+      "href": "#header",
+      "enabled": true
+    },
+    {
+      "id": "about",
+      "label": "About",
+      "href": "#about",
+      "enabled": true
+    },
+    {
+      "id": "resume",
+      "label": "Resume",
+      "href": "#resume",
+      "enabled": true
+    },
+    {
+      "id": "projects",
+      "label": "Projects",
+      "href": "#projects",
+      "enabled": true
+    },
+    {
+      "id": "contact",
+      "label": "Contact",
+      "href": "#contact",
+      "enabled": true
+    }
+  ],
+  "sections": {
+    "about": {
+      "enabled": true,
+      "title": "About",
+      "subtitle": "Learn more about me"
+    },
+    "skills": {
+      "enabled": true,
+      "title": "Skills",
+      "subtitle": ""
+    },
+    "interests": {
+      "enabled": true,
+      "title": "Interests",
+      "subtitle": ""
+    },
+    "testimonials": {
+      "enabled": true,
+      "title": "Testimonials",
+      "subtitle": ""
+    },
+    "resume": {
+      "enabled": true,
+      "title": "Resume",
+      "subtitle": "Check My Resume"
+    },
+    "projects": {
+      "enabled": true,
+      "title": "Projects",
+      "subtitle": "My Work"
+    },
+    "contact": {
+      "enabled": true,
+      "title": "Contact",
+      "subtitle": "Contact Me"
+    }
+  },
+  "contactBoxes": {
+    "addressTitle": "My Address",
+    "socialTitle": "Social Profiles",
+    "emailTitle": "Email Me",
+    "phoneTitle": "Call Me"
+  },
+  "contactForm": {
+    "namePlaceholder": "Your Name",
+    "emailPlaceholder": "Your Email",
+    "subjectPlaceholder": "Subject",
+    "messagePlaceholder": "Message",
+    "submitLabel": "Send Message",
+    "sendingLabel": "Sending...",
+    "loadingLabel": "Loading",
+    "sentMessage": "Your message has been sent. Thank you!",
+    "successFallback": "Message sent successfully!",
+    "errorFallback": "Unable to send your message.",
+    "captchaTitle": "Security Check",
+    "captchaIntro": "Please answer the following question to submit the form:",
+    "captchaQuestion": "What is 1 + 1?",
+    "captchaIncorrectMessage": "Incorrect answer. Please try again.",
+    "captchaCloseLabel": "Close",
+    "captchaSubmitLabel": "Submit Answer"
+  },
+  "projects": {
+    "allFilterLabel": "All",
+    "viewDetailsLabel": "View Details",
+    "technologiesTitle": "Technologies",
+    "highlightsTitle": "Key Highlights",
+    "liveDemoLabel": "Live Demo",
+    "sourceCodeLabel": "Source Code"
+  },
+  "testimonials": {
+    "sourceUrl": "https://script.google.com/macros/s/AKfycbyNpfflHQUWQ1TzMOEu5S28L23X-KogevFd1K201jzjD_pHUeTIqm0kjegRyACGq-FreA/exec",
+    "placeholderImage": "assets/img/testimonials/placeholder.png"
+  }
+}

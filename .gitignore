@@ -3,6 +3,6 @@ node_modules/
 stderr.log
 tmp/
 public/games/
-data/
 public/assets/uploads/
 public/private/dogs/
+/data

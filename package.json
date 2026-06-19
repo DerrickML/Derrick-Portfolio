@@ -4,7 +4,9 @@
   "description": "Derrick's digital portfolio",
   "main": "server.js",
   "scripts": {
-    "test": "node --check server.js && node --check public/assets/js/admin.js && node --check public/assets/js/contact-form.js && node --check public/assets/js/data-loader.js && node --check public/assets/js/main.js && node --check public/assets/js/projects-loader.js && node --check public/assets/js/testimonials.js && node --check workers/subscription-reminder-cron.mjs",
+    "setup": "node scripts/setup-data.js",
+    "setup:data": "node scripts/setup-data.js",
+    "test": "node --check server.js && node --check scripts/setup-data.js && node --check public/assets/js/admin.js && node --check public/assets/js/contact-form.js && node --check public/assets/js/data-loader.js && node --check public/assets/js/main.js && node --check public/assets/js/projects-loader.js && node --check public/assets/js/testimonials.js && node --check workers/subscription-reminder-cron.mjs",
     "start": "node server.js"
   },
   "engines": {

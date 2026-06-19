@@ -12,6 +12,7 @@ A dynamic personal portfolio showcasing skills, experience, and projects. Built 
 - **Admin Dashboard** — Password-protected panel at `/admin.html` to edit content, site settings, SMTP settings, images, and admin password
 - **Testimonials** — Loaded from a configurable external JSON/Google Sheets API
 - **Contact Form** — Server-side email delivery via configurable Nodemailer SMTP with CAPTCHA protection
+- **Private Subscription Tracker** — Admin-only renewal tracking for domains, SaaS tools, hosting, and client services with configurable email reminders
 - **Security Hardened** — Helmet CSP headers, rate limiting, input validation, bcrypt auth
 
 ## 🛠 Tech Stack
@@ -46,7 +47,13 @@ Derrick-Portfolio/
 │   ├── projects.json      # Project cards and modal details
 │   ├── settings.json      # Non-secret runtime settings and images
 │   ├── site.json          # Public navigation, labels, visibility, testimonials source
+│   ├── subscriptions.json # Private renewal/subscription tracker data, gitignored
 │   └── secrets.json       # Runtime secrets created by admin settings, gitignored
+│
+├── workers/               # Optional Cloudflare Worker cron scheduler
+│   ├── subscription-reminder-cron.mjs
+│   ├── subscription-reminder-wrangler.example.toml
+│   └── README.md
 │
 └── public/                # Static frontend
     ├── index.html         # Main portfolio page
@@ -93,6 +100,9 @@ EMAIL_PASSWORD=your_email_password
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD_HASH=<bcrypt_hash>
 SESSION_SECRET=<random_string>
+
+# Private cron endpoint for subscription reminders
+CRON_SECRET=<random_string>
 ```
 
 To generate a password hash:
@@ -141,6 +151,16 @@ The server starts on **http://localhost:3003**.
 | `PUT` | `/api/admin/site` | Save public site configuration |
 | `POST` | `/api/admin/password` | Change admin password |
 | `POST` | `/api/admin/uploads/:type` | Upload an authenticated image (`background`, `profile`, `project`, `general`) |
+| `GET` | `/api/admin/subscriptions` | Read private subscription tracker data |
+| `PUT` | `/api/admin/subscriptions` | Save subscription tracker data |
+| `POST` | `/api/admin/subscriptions/reminders/run` | Manually run due reminder scan |
+| `POST` | `/api/admin/subscriptions/test-email` | Send a test reminder email |
+
+### Private Cron
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/cron/subscription-reminders` | Cron-only reminder endpoint protected by `Authorization: Bearer <CRON_SECRET>` |
 
 ---
 
@@ -151,6 +171,7 @@ The server starts on **http://localhost:3003**.
 - **Input Validation** — Length limits and format checks on all inputs
 - **bcrypt** — Hashed admin password (never stored in plaintext)
 - **Secret split** — Runtime SMTP password and admin password override are stored in gitignored `data/secrets.json`
+- **Private operational data** — Subscription tracker data stays in gitignored `data/subscriptions.json`
 - **Session Auth** — httpOnly, same-site cookies with 24h expiry
 - **Atomic Saves** — Admin edits are written via temporary files before replacing JSON data
 - **Scoped client scripting** — App interactions use external JS modules and event delegation
@@ -167,9 +188,28 @@ Access at `/admin.html` after starting the server. Features:
 - **Resume** — Full editor for summary, experience, education, certifications, honors, research
 - **Contact** — Edit address, emails, phones, social links
 - **Projects** — Add, edit, delete, and reorder project cards
+- **Subscriptions** — Track renewals for domains, SaaS, hosting, and client services with multiple email reminders per item
 - **Settings** — Configure SMTP, admin password, site images, analytics, public navigation, section labels, section visibility, project labels, contact labels, and testimonials source
 
 Changes save instantly to the JSON files and are reflected on the public site.
+
+### Subscription Reminder Cron
+
+The portfolio app owns the data and sends email. A scheduler only needs to call:
+
+```http
+POST https://your-domain.com/api/cron/subscription-reminders
+Authorization: Bearer <CRON_SECRET>
+```
+
+An optional Cloudflare Worker scaffold is included in `workers/`. Copy the example Wrangler file, set `PORTFOLIO_CRON_URL`, add `CRON_SECRET` as a Wrangler secret, then deploy:
+
+```bash
+cd workers
+copy subscription-reminder-wrangler.example.toml wrangler.toml
+npx wrangler secret put CRON_SECRET
+npx wrangler deploy
+```
 
 ---
 

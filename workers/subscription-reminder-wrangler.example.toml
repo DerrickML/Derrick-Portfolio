@@ -1,0 +1,12 @@
+name = "portfolio-subscription-reminders"
+main = "subscription-reminder-cron.mjs"
+compatibility_date = "2026-06-19"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+PORTFOLIO_CRON_URL = "https://derrickml.com/api/cron/subscription-reminders"
+
+# Store CRON_SECRET as a Wrangler secret, not in this file:
+# npx wrangler secret put CRON_SECRET

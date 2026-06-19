@@ -18,6 +18,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const SITE_FILE = path.join(DATA_DIR, 'site.json');
 const SECRETS_FILE = path.join(DATA_DIR, 'secrets.json');
+const SUBSCRIPTIONS_FILE = path.join(DATA_DIR, 'subscriptions.json');
 const UPLOADS_DIR = path.join(PUBLIC_DIR, 'assets', 'uploads');
 
 const DEFAULT_SETTINGS = {
@@ -96,6 +97,19 @@ const DEFAULT_SITE = {
 const DEFAULT_SECRETS = {
     emailPassword: '',
     adminPasswordHash: '',
+    cronSecret: '',
+};
+
+const DEFAULT_SUBSCRIPTIONS_DATA = {
+    settings: {
+        enabled: true,
+        recipientEmail: '',
+        timezone: 'Africa/Kampala',
+        defaultReminderTime: '09:00',
+        digest: true,
+    },
+    subscriptions: [],
+    reminderHistory: [],
 };
 
 const IMAGE_MIME_TYPES = {
@@ -325,6 +339,387 @@ function getEmailConfig(settings = getSettings(), secrets = getSecrets()) {
 function getAdminPasswordHash() {
     const secrets = getSecrets();
     return secrets.adminPasswordHash || process.env.ADMIN_PASSWORD_HASH || '';
+}
+
+function getCronSecret() {
+    const secrets = getSecrets();
+    return process.env.CRON_SECRET || secrets.cronSecret || '';
+}
+
+function getSubscriptionsData() {
+    return readJsonFile(SUBSCRIPTIONS_FILE, DEFAULT_SUBSCRIPTIONS_DATA);
+}
+
+function saveSubscriptionsData(data) {
+    writeJsonAtomic(SUBSCRIPTIONS_FILE, mergeDefaults(DEFAULT_SUBSCRIPTIONS_DATA, data));
+}
+
+function cleanNumber(value, fallback = 0) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+}
+
+function cleanDateOnly(value) {
+    const date = cleanString(value, 20);
+    return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '';
+}
+
+function cleanTime(value, fallback = '09:00') {
+    const time = cleanString(value, 5);
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : fallback;
+}
+
+function sanitizeSubscriptionReminder(reminder) {
+    const offsetDays = Math.max(0, Math.min(3650, Math.round(cleanNumber(reminder?.offsetDays, 0))));
+    return {
+        id: cleanString(reminder?.id, 80) || crypto.randomUUID(),
+        offsetDays,
+        time: cleanTime(reminder?.time, DEFAULT_SUBSCRIPTIONS_DATA.settings.defaultReminderTime),
+        enabled: cleanBoolean(reminder?.enabled, true),
+    };
+}
+
+function sanitizeSubscription(subscription) {
+    const allowedStatuses = new Set(['active', 'paused', 'cancelled', 'archived']);
+    const allowedCycles = new Set(['monthly', 'quarterly', 'semiannual', 'yearly', 'biennial', 'custom']);
+    const reminders = Array.isArray(subscription?.reminders)
+        ? subscription.reminders.slice(0, 20).map(sanitizeSubscriptionReminder)
+        : [];
+    const status = cleanString(subscription?.status, 20).toLowerCase();
+    const billingCycle = cleanString(subscription?.billingCycle, 20).toLowerCase();
+
+    return {
+        id: cleanString(subscription?.id, 120) || crypto.randomUUID(),
+        name: cleanString(subscription?.name, 160),
+        category: cleanString(subscription?.category, 80),
+        provider: cleanString(subscription?.provider, 120),
+        client: cleanString(subscription?.client, 120),
+        serviceUrl: cleanString(subscription?.serviceUrl, 2048),
+        renewalUrl: cleanString(subscription?.renewalUrl, 2048),
+        accountEmail: cleanString(subscription?.accountEmail, 320),
+        renewalDate: cleanDateOnly(subscription?.renewalDate),
+        billingCycle: allowedCycles.has(billingCycle) ? billingCycle : 'yearly',
+        cost: Math.max(0, cleanNumber(subscription?.cost, 0)),
+        currency: cleanString(subscription?.currency, 12).toUpperCase() || 'USD',
+        autoRenew: cleanBoolean(subscription?.autoRenew, false),
+        status: allowedStatuses.has(status) ? status : 'active',
+        reminders,
+        notes: cleanString(subscription?.notes, 5000),
+        createdAt: cleanString(subscription?.createdAt, 40) || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    };
+}
+
+function sanitizeSubscriptionsData(input) {
+    const source = mergeDefaults(DEFAULT_SUBSCRIPTIONS_DATA, input || {});
+    const settings = source.settings || {};
+    const subscriptions = Array.isArray(source.subscriptions)
+        ? source.subscriptions.map(sanitizeSubscription).filter(item => item.name && item.renewalDate)
+        : [];
+    const reminderHistory = Array.isArray(source.reminderHistory)
+        ? source.reminderHistory.slice(-500).map(item => ({
+            key: cleanString(item.key, 300),
+            subscriptionId: cleanString(item.subscriptionId, 120),
+            subscriptionName: cleanString(item.subscriptionName, 160),
+            renewalDate: cleanDateOnly(item.renewalDate),
+            offsetDays: Math.max(0, Math.min(3650, Math.round(cleanNumber(item.offsetDays, 0)))),
+            sentAt: cleanString(item.sentAt, 40),
+            recipientEmail: cleanString(item.recipientEmail, 320),
+        })).filter(item => item.key)
+        : [];
+
+    return {
+        settings: {
+            enabled: cleanBoolean(settings.enabled, true),
+            recipientEmail: cleanString(settings.recipientEmail, 320),
+            timezone: cleanString(settings.timezone, 80) || DEFAULT_SUBSCRIPTIONS_DATA.settings.timezone,
+            defaultReminderTime: cleanTime(settings.defaultReminderTime, DEFAULT_SUBSCRIPTIONS_DATA.settings.defaultReminderTime),
+            digest: cleanBoolean(settings.digest, true),
+        },
+        subscriptions,
+        reminderHistory,
+    };
+}
+
+function getZonedParts(date, timeZone) {
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+    const parts = {};
+    formatter.formatToParts(date).forEach(part => {
+        if (part.type !== 'literal') {
+            parts[part.type] = part.value;
+        }
+    });
+    return {
+        date: `${parts.year}-${parts.month}-${parts.day}`,
+        time: `${parts.hour}:${parts.minute}`,
+        year: Number(parts.year),
+        month: Number(parts.month),
+        day: Number(parts.day),
+        hour: Number(parts.hour),
+        minute: Number(parts.minute),
+    };
+}
+
+function parseDateAsUtc(dateString) {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return Date.UTC(year, month - 1, day);
+}
+
+function daysUntilDate(targetDate, currentDate) {
+    if (!targetDate || !currentDate) {
+        return null;
+    }
+    return Math.round((parseDateAsUtc(targetDate) - parseDateAsUtc(currentDate)) / 86400000);
+}
+
+function getSubscriptionComputedStatus(subscription, currentDate) {
+    if (subscription.status === 'archived' || subscription.status === 'cancelled') {
+        return subscription.status;
+    }
+    if (subscription.status === 'paused') {
+        return 'paused';
+    }
+    const daysLeft = daysUntilDate(subscription.renewalDate, currentDate);
+    if (daysLeft === null) {
+        return 'unknown';
+    }
+    if (daysLeft < 0) {
+        return 'expired';
+    }
+    if (daysLeft <= 7) {
+        return 'due-week';
+    }
+    if (daysLeft <= 30) {
+        return 'due-soon';
+    }
+    return 'active';
+}
+
+function decorateSubscriptionsData(data, now = new Date()) {
+    const timezone = data.settings.timezone || DEFAULT_SUBSCRIPTIONS_DATA.settings.timezone;
+    const zoned = getZonedParts(now, timezone);
+    const decoratedSubscriptions = data.subscriptions.map(subscription => {
+        const daysLeft = daysUntilDate(subscription.renewalDate, zoned.date);
+        return {
+            ...subscription,
+            daysLeft,
+            computedStatus: getSubscriptionComputedStatus(subscription, zoned.date),
+        };
+    });
+    const summary = decoratedSubscriptions.reduce((acc, item) => {
+        acc.total += 1;
+        if (item.status === 'archived') acc.archived += 1;
+        if (item.status === 'active') acc.active += 1;
+        if (item.computedStatus === 'expired') acc.expired += 1;
+        if (typeof item.daysLeft === 'number' && item.daysLeft >= 0 && item.daysLeft <= 7) acc.due7 += 1;
+        if (typeof item.daysLeft === 'number' && item.daysLeft >= 0 && item.daysLeft <= 30) acc.due30 += 1;
+        return acc;
+    }, { total: 0, active: 0, due7: 0, due30: 0, expired: 0, archived: 0 });
+
+    return {
+        ...data,
+        subscriptions: decoratedSubscriptions,
+        summary,
+        now: {
+            iso: now.toISOString(),
+            timezone,
+            date: zoned.date,
+            time: zoned.time,
+        },
+    };
+}
+
+function getDueSubscriptionReminders(data, now = new Date()) {
+    const timezone = data.settings.timezone || DEFAULT_SUBSCRIPTIONS_DATA.settings.timezone;
+    const defaultReminderTime = cleanTime(data.settings.defaultReminderTime, DEFAULT_SUBSCRIPTIONS_DATA.settings.defaultReminderTime);
+    const zoned = getZonedParts(now, timezone);
+    const sentKeys = new Set((data.reminderHistory || []).map(item => item.key));
+    const due = [];
+
+    if (!data.settings.enabled) {
+        return { due, zoned: { ...zoned, timezone } };
+    }
+
+    data.subscriptions.forEach(subscription => {
+        if (subscription.status !== 'active') {
+            return;
+        }
+        const daysLeft = daysUntilDate(subscription.renewalDate, zoned.date);
+        if (daysLeft === null || daysLeft < 0) {
+            return;
+        }
+        const reminders = subscription.reminders?.length
+            ? subscription.reminders
+            : [{ id: 'default-30', offsetDays: 30, time: defaultReminderTime, enabled: true }];
+
+        reminders.forEach(reminder => {
+            if (!reminder.enabled || reminder.offsetDays !== daysLeft) {
+                return;
+            }
+            const reminderTime = cleanTime(reminder.time, defaultReminderTime);
+            if (zoned.time < reminderTime) {
+                return;
+            }
+            const key = `${subscription.id}|${subscription.renewalDate}|${reminder.offsetDays}|${reminderTime}`;
+            if (sentKeys.has(key)) {
+                return;
+            }
+            due.push({
+                key,
+                subscriptionId: subscription.id,
+                subscriptionName: subscription.name,
+                provider: subscription.provider,
+                client: subscription.client,
+                category: subscription.category,
+                renewalDate: subscription.renewalDate,
+                daysLeft,
+                offsetDays: reminder.offsetDays,
+                reminderTime,
+                cost: subscription.cost,
+                currency: subscription.currency,
+                autoRenew: subscription.autoRenew,
+                renewalUrl: subscription.renewalUrl,
+                serviceUrl: subscription.serviceUrl,
+                notes: subscription.notes,
+            });
+        });
+    });
+
+    return { due, zoned: { ...zoned, timezone } };
+}
+
+async function sendConfiguredEmail({ to, subject, text, html }) {
+    const emailConfig = getEmailConfig();
+    if (!emailConfig.user || !emailConfig.pass) {
+        throw new Error('Email service is not configured.');
+    }
+
+    const transporter = nodemailer.createTransport({
+        host: emailConfig.host,
+        port: emailConfig.port,
+        secure: emailConfig.secure,
+        auth: {
+            user: emailConfig.user,
+            pass: emailConfig.pass,
+        },
+    });
+
+    return transporter.sendMail({
+        from: emailConfig.from,
+        to: to || emailConfig.to,
+        subject,
+        text,
+        html,
+    });
+}
+
+function formatReminderEmail(due, zoned) {
+    const subject = due.length === 1
+        ? `Subscription reminder: ${due[0].subscriptionName} renews in ${due[0].daysLeft} day${due[0].daysLeft === 1 ? '' : 's'}`
+        : `Subscription reminders: ${due.length} services need attention`;
+    const lines = [
+        `Subscription reminders for ${zoned.date} ${zoned.time} (${zoned.timezone || ''})`,
+        '',
+        ...due.flatMap(item => [
+            `${item.subscriptionName} (${item.provider || 'No provider'})`,
+            `Renewal date: ${item.renewalDate} (${item.daysLeft} day${item.daysLeft === 1 ? '' : 's'} left)`,
+            item.client ? `Client: ${item.client}` : '',
+            item.category ? `Category: ${item.category}` : '',
+            item.cost ? `Cost: ${item.currency} ${item.cost}` : '',
+            item.autoRenew ? 'Auto-renew: Yes' : 'Auto-renew: No',
+            item.renewalUrl ? `Renewal URL: ${item.renewalUrl}` : '',
+            item.serviceUrl ? `Service URL: ${item.serviceUrl}` : '',
+            '',
+        ].filter(Boolean)),
+    ];
+    const htmlItems = due.map(item => `
+        <li>
+            <strong>${escapeHtml(item.subscriptionName)}</strong>
+            ${item.provider ? ` via ${escapeHtml(item.provider)}` : ''}<br>
+            Renews on <strong>${escapeHtml(item.renewalDate)}</strong>
+            (${item.daysLeft} day${item.daysLeft === 1 ? '' : 's'} left).<br>
+            ${item.client ? `Client: ${escapeHtml(item.client)}<br>` : ''}
+            ${item.category ? `Category: ${escapeHtml(item.category)}<br>` : ''}
+            ${item.cost ? `Cost: ${escapeHtml(item.currency)} ${escapeHtml(String(item.cost))}<br>` : ''}
+            Auto-renew: ${item.autoRenew ? 'Yes' : 'No'}<br>
+            ${item.renewalUrl ? `<a href="${escapeHtml(item.renewalUrl)}">Renewal link</a><br>` : ''}
+            ${item.serviceUrl ? `<a href="${escapeHtml(item.serviceUrl)}">Service link</a>` : ''}
+        </li>
+    `).join('');
+    return {
+        subject,
+        text: lines.join('\n'),
+        html: `<p>Subscription reminders for ${escapeHtml(zoned.date)} ${escapeHtml(zoned.time)}.</p><ul>${htmlItems}</ul>`,
+    };
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+async function runSubscriptionReminderScan({ dryRun = false } = {}) {
+    const data = sanitizeSubscriptionsData(getSubscriptionsData());
+    const { due, zoned } = getDueSubscriptionReminders(data, new Date());
+    const recipientEmail = data.settings.recipientEmail || getEmailConfig().to;
+
+    if (!due.length || dryRun) {
+        return {
+            sent: false,
+            due,
+            count: due.length,
+            recipientEmail,
+            now: zoned,
+            message: due.length ? 'Reminders are due but dry run was requested.' : 'No reminders due.',
+        };
+    }
+    if (!recipientEmail) {
+        throw new Error('No reminder recipient email is configured.');
+    }
+
+    const email = formatReminderEmail(due, zoned);
+    await sendConfiguredEmail({
+        to: recipientEmail,
+        subject: email.subject,
+        text: email.text,
+        html: email.html,
+    });
+
+    const sentAt = new Date().toISOString();
+    data.reminderHistory = [
+        ...(data.reminderHistory || []),
+        ...due.map(item => ({
+            key: item.key,
+            subscriptionId: item.subscriptionId,
+            subscriptionName: item.subscriptionName,
+            renewalDate: item.renewalDate,
+            offsetDays: item.offsetDays,
+            sentAt,
+            recipientEmail,
+        })),
+    ].slice(-500);
+    saveSubscriptionsData(data);
+
+    return {
+        sent: true,
+        due,
+        count: due.length,
+        recipientEmail,
+        now: zoned,
+        message: `Sent ${due.length} subscription reminder${due.length === 1 ? '' : 's'}.`,
+    };
 }
 
 function imageMagicMatches(buffer, mimeType) {
@@ -566,6 +961,33 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized. Please log in.' });
 }
 
+function requireCronAuth(req, res, next) {
+    const expected = getCronSecret();
+    const authHeader = req.get('authorization') || '';
+    const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const provided = bearer || req.get('x-cron-secret') || '';
+
+    if (!expected) {
+        return res.status(503).json({ error: 'Cron secret is not configured.' });
+    }
+    const providedBuffer = Buffer.from(provided);
+    const expectedBuffer = Buffer.from(expected);
+    if (provided && providedBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(providedBuffer, expectedBuffer)) {
+        return next();
+    }
+    return res.status(401).json({ error: 'Unauthorized cron request.' });
+}
+
+app.post('/api/cron/subscription-reminders', requireCronAuth, async (req, res) => {
+    try {
+        const result = await runSubscriptionReminderScan({ dryRun: false });
+        res.json({ success: true, ...result });
+    } catch (err) {
+        console.error('Subscription reminder cron error:', err.message);
+        res.status(500).json({ error: err.message || 'Error running subscription reminders.' });
+    }
+});
+
 // Login
 app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
     const { username, password } = req.body;
@@ -603,6 +1025,57 @@ app.post('/api/admin/logout', (req, res) => {
 // Session check
 app.get('/api/admin/check', (req, res) => {
     res.json({ authenticated: !!(req.session && req.session.isAdmin) });
+});
+
+app.get('/api/admin/subscriptions', requireAuth, (req, res) => {
+    const data = sanitizeSubscriptionsData(getSubscriptionsData());
+    res.json(decorateSubscriptionsData(data));
+});
+
+app.put('/api/admin/subscriptions', requireAuth, (req, res) => {
+    try {
+        const data = sanitizeSubscriptionsData(req.body || {});
+        saveSubscriptionsData(data);
+        res.json({
+            success: true,
+            message: 'Subscriptions updated successfully.',
+            data: decorateSubscriptionsData(data),
+        });
+    } catch (err) {
+        console.error('Error saving subscriptions:', err.message);
+        res.status(500).json({ error: 'Error saving subscriptions.' });
+    }
+});
+
+app.post('/api/admin/subscriptions/reminders/run', requireAuth, async (req, res) => {
+    try {
+        const result = await runSubscriptionReminderScan({ dryRun: cleanBoolean(req.body?.dryRun, false) });
+        res.json({ success: true, ...result });
+    } catch (err) {
+        console.error('Manual subscription reminder error:', err.message);
+        res.status(500).json({ error: err.message || 'Error running subscription reminder check.' });
+    }
+});
+
+app.post('/api/admin/subscriptions/test-email', requireAuth, async (req, res) => {
+    try {
+        const data = sanitizeSubscriptionsData(getSubscriptionsData());
+        const recipientEmail = cleanString(req.body?.recipientEmail, 320) || data.settings.recipientEmail || getEmailConfig().to;
+        if (!recipientEmail) {
+            return res.status(400).json({ error: 'No reminder recipient email is configured.' });
+        }
+
+        await sendConfiguredEmail({
+            to: recipientEmail,
+            subject: 'Subscription reminder test',
+            text: 'This is a test email from your portfolio subscription reminder system.',
+            html: '<p>This is a test email from your portfolio subscription reminder system.</p>',
+        });
+        res.json({ success: true, message: `Test reminder email sent to ${recipientEmail}.` });
+    } catch (err) {
+        console.error('Subscription test email error:', err.message);
+        res.status(500).json({ error: err.message || 'Error sending test reminder email.' });
+    }
 });
 
 app.get('/api/admin/settings', requireAuth, (req, res) => {

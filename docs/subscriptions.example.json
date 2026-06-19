@@ -1,0 +1,35 @@
+{
+  "settings": {
+    "enabled": true,
+    "recipientEmail": "you@example.com",
+    "timezone": "Africa/Kampala",
+    "defaultReminderTime": "09:00",
+    "digest": true
+  },
+  "subscriptions": [
+    {
+      "id": "example-domain",
+      "name": "example.com",
+      "category": "Domain",
+      "provider": "Cloudflare",
+      "client": "",
+      "serviceUrl": "https://dash.cloudflare.com",
+      "renewalUrl": "https://dash.cloudflare.com",
+      "accountEmail": "you@example.com",
+      "renewalDate": "2026-12-31",
+      "billingCycle": "yearly",
+      "cost": 12,
+      "currency": "USD",
+      "autoRenew": true,
+      "status": "active",
+      "reminders": [
+        { "offsetDays": 60, "time": "09:00", "enabled": true },
+        { "offsetDays": 30, "time": "09:00", "enabled": true },
+        { "offsetDays": 7, "time": "09:00", "enabled": true },
+        { "offsetDays": 1, "time": "09:00", "enabled": true }
+      ],
+      "notes": ""
+    }
+  ],
+  "reminderHistory": []
+}

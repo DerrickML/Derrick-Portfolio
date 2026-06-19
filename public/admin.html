@@ -188,6 +188,52 @@
       display: none;
     }
     .image-preview.visible { display: block; }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: .75rem;
+    }
+    .metric-card {
+      background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: 8px; padding: .9rem;
+    }
+    .metric-card .metric-value {
+      display: block; font-size: 1.35rem; font-weight: 700; color: #fff;
+    }
+    .metric-card .metric-label {
+      color: var(--text-muted); font-size: .74rem; text-transform: uppercase; letter-spacing: .5px;
+    }
+    .subscription-toolbar {
+      display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    }
+    .subscription-list-item {
+      display: grid; grid-template-columns: 1fr auto auto; gap: .8rem; align-items: center;
+      background: var(--bg-dark); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 8px;
+    }
+    .subscription-title {
+      color: #fff; font-weight: 700; margin-bottom: 2px;
+    }
+    .subscription-meta {
+      color: var(--text-muted); font-size: .78rem;
+    }
+    .subscription-status {
+      border-radius: 50px; padding: 4px 10px; font-size: .7rem;
+      font-weight: 700; text-transform: uppercase; letter-spacing: .45px;
+      white-space: nowrap;
+    }
+    .subscription-status.active { color: var(--accent); background: rgba(16,185,129,.15); }
+    .subscription-status.due-soon { color: #f59e0b; background: rgba(245,158,11,.15); }
+    .subscription-status.due-week, .subscription-status.expired { color: var(--danger); background: rgba(239,68,68,.15); }
+    .subscription-status.paused, .subscription-status.cancelled, .subscription-status.archived { color: var(--text-muted); background: rgba(100,116,139,.15); }
+    .subscription-actions {
+      display: flex; gap: .35rem; align-items: center;
+    }
+    .subscription-actions .btn { padding: 4px 8px; font-size: .78rem; }
+    .reminder-row {
+      background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: 8px; padding: .85rem; margin-bottom: .65rem;
+    }
     /* SECTION PANELS */
     .section-panel { display: none; }
     .section-panel.active { display: block; }
@@ -197,6 +243,9 @@
       .sidebar .brand h2, .sidebar .brand small, .sidebar-nav li a span { display: none; }
       .sidebar-nav li a { justify-content: center; padding: .75rem; }
       .main-content { margin-left: 60px; }
+      .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .subscription-list-item { grid-template-columns: 1fr; }
+      .subscription-actions { justify-content: flex-start; }
     }
   </style>
 </head>
@@ -237,6 +286,7 @@
         <li><a href="#" data-section="resume"><i class="bi bi-file-earmark-text"></i> <span>Resume</span></a></li>
         <li><a href="#" data-section="contact"><i class="bi bi-envelope"></i> <span>Contact</span></a></li>
         <li><a href="#" data-section="projects"><i class="bi bi-kanban"></i> <span>Projects</span></a></li>
+        <li><a href="#" data-section="subscriptions"><i class="bi bi-calendar2-check"></i> <span>Subscriptions</span></a></li>
         <li><a href="#" data-section="settings"><i class="bi bi-sliders"></i> <span>Settings</span></a></li>
       </ul>
     </nav>
@@ -430,6 +480,76 @@
           <div id="projects-list" class="sortable-list"></div>
         </div>
         <button class="btn btn-accent" data-action="save" data-section="projects"><i class="bi bi-save"></i> Save Projects</button>
+      </div>
+
+      <!-- ===== SUBSCRIPTIONS SECTION ===== -->
+      <div class="section-panel" id="panel-subscriptions">
+        <div class="editor-card">
+          <h3><i class="bi bi-calendar2-check"></i> Subscription Tracker</h3>
+          <div class="metrics-grid mb-3">
+            <div class="metric-card"><span class="metric-value" id="sub-metric-total">0</span><span class="metric-label">Total</span></div>
+            <div class="metric-card"><span class="metric-value" id="sub-metric-active">0</span><span class="metric-label">Active</span></div>
+            <div class="metric-card"><span class="metric-value" id="sub-metric-due7">0</span><span class="metric-label">Due 7 Days</span></div>
+            <div class="metric-card"><span class="metric-value" id="sub-metric-due30">0</span><span class="metric-label">Due 30 Days</span></div>
+            <div class="metric-card"><span class="metric-value" id="sub-metric-expired">0</span><span class="metric-label">Expired</span></div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label" for="sub-recipient">Reminder Recipient Email</label>
+              <input type="email" class="form-control" id="sub-recipient" placeholder="you@example.com">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="sub-timezone">Timezone</label>
+              <input type="text" class="form-control" id="sub-timezone" placeholder="Africa/Kampala">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label" for="sub-default-time">Default Time</label>
+              <input type="time" class="form-control" id="sub-default-time">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Reminder Options</label>
+              <div class="d-flex gap-3 flex-wrap">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="sub-enabled">
+                  <label class="form-check-label" for="sub-enabled">Enabled</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="sub-digest">
+                  <label class="form-check-label" for="sub-digest">Digest</label>
+                </div>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="form-text">
+                Cron endpoint: <code>/api/cron/subscription-reminders</code>. Configure your scheduler with an Authorization bearer token matching <code>CRON_SECRET</code>.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="editor-card">
+          <div class="subscription-toolbar mb-3">
+            <div class="d-flex gap-2 flex-wrap">
+              <input type="search" class="form-control" id="sub-search" placeholder="Search subscriptions..." style="min-width:240px;">
+              <select class="form-select" id="sub-status-filter" style="width:160px;">
+                <option value="">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="due-soon">Due Soon</option>
+                <option value="due-week">Due This Week</option>
+                <option value="expired">Expired</option>
+                <option value="paused">Paused</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-outline-accent" data-action="runSubscriptionCheck"><i class="bi bi-bell"></i> Run Check</button>
+              <button class="btn btn-outline-accent" data-action="sendSubscriptionTest"><i class="bi bi-envelope-check"></i> Test Email</button>
+              <button class="btn btn-outline-accent" data-action="createSubscription"><i class="bi bi-plus-lg"></i> New Subscription</button>
+            </div>
+          </div>
+          <div id="subscriptions-list"></div>
+          <button class="btn btn-accent mt-3" data-action="saveSubscriptions"><i class="bi bi-save"></i> Save Subscriptions</button>
+        </div>
       </div>
 
       <!-- ===== SETTINGS SECTION ===== -->
@@ -665,6 +785,106 @@
       </div>
 
       </div><!-- .section-panels-wrap -->
+
+    <!-- Subscription Editor Modal -->
+    <div class="modal fade" id="subscriptionEditorModal" tabindex="-1" aria-labelledby="subscriptionEditorModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content" style="background:var(--bg-card); border:1px solid var(--border); border-radius:16px;">
+          <div class="modal-header" style="border-bottom:1px solid var(--border); padding:1.25rem 1.5rem;">
+            <h5 class="modal-title" id="subscriptionEditorModalLabel" style="color:var(--accent);"><i class="bi bi-calendar2-check"></i> New Subscription</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" style="padding:1.5rem;">
+            <input type="hidden" id="se-id">
+            <input type="hidden" id="se-index" value="-1">
+            <div class="row g-3">
+              <div class="col-md-5">
+                <label class="form-label" for="se-name">Name</label>
+                <input type="text" class="form-control" id="se-name" placeholder="derrickml.com, Hosting - Client A">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" for="se-category">Category</label>
+                <input type="text" class="form-control" id="se-category" placeholder="Domain, Hosting, SaaS">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="se-provider">Provider</label>
+                <input type="text" class="form-control" id="se-provider" placeholder="Cloudflare, Namecheap, DigitalOcean">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="se-client">Client</label>
+                <input type="text" class="form-control" id="se-client" placeholder="Optional">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="se-account-email">Account Email</label>
+                <input type="email" class="form-control" id="se-account-email" placeholder="account@example.com">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="se-status">Status</label>
+                <select class="form-select" id="se-status">
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="se-renewal-date">Renewal Date</label>
+                <input type="date" class="form-control" id="se-renewal-date">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" for="se-billing-cycle">Billing Cycle</label>
+                <select class="form-select" id="se-billing-cycle">
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="semiannual">Semiannual</option>
+                  <option value="yearly">Yearly</option>
+                  <option value="biennial">Biennial</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label" for="se-cost">Cost</label>
+                <input type="number" min="0" step="0.01" class="form-control" id="se-cost" placeholder="0.00">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label" for="se-currency">Currency</label>
+                <input type="text" class="form-control" id="se-currency" placeholder="USD">
+              </div>
+              <div class="col-md-1">
+                <label class="form-label">Auto</label>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="se-auto-renew">
+                  <label class="form-check-label" for="se-auto-renew">Renew</label>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="se-service-url">Service URL</label>
+                <input type="text" class="form-control" id="se-service-url" placeholder="https://...">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="se-renewal-url">Renewal / Billing URL</label>
+                <input type="text" class="form-control" id="se-renewal-url" placeholder="https://...">
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="se-notes">Notes</label>
+                <textarea class="form-control" id="se-notes" rows="3" placeholder="Internal renewal notes, login hints, client context..."></textarea>
+              </div>
+              <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <label class="form-label mb-0">Reminders</label>
+                  <button class="btn btn-outline-accent" type="button" data-action="addSubscriptionReminder"><i class="bi bi-plus"></i> Add Reminder</button>
+                </div>
+                <div id="se-reminders-list"></div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer" style="border-top:1px solid var(--border); padding:1rem 1.5rem;">
+            <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-accent" id="se-save-btn"><i class="bi bi-check-lg"></i> Save Subscription</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Project Editor Modal -->
     <div class="modal fade" id="projectEditorModal" tabindex="-1" aria-labelledby="projectEditorModalLabel" aria-hidden="true">

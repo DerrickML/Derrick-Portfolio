@@ -10,6 +10,12 @@
 let currentData = {};
 let currentSettings = {};
 let currentSite = {};
+let subscriptionsData = {
+  settings: {},
+  subscriptions: [],
+  reminderHistory: [],
+  summary: {},
+};
 const sortableInstances = [];
 const siteSectionOrder = ['about', 'skills', 'interests', 'testimonials', 'resume', 'projects', 'contact'];
 
@@ -151,6 +157,13 @@ document.addEventListener('click', (e) => {
     case 'changePassword': changePassword(); break;
     case 'uploadSettingImage': uploadSettingImage(actionBtn); break;
     case 'uploadProjectImage': uploadProjectImage(); break;
+    case 'createSubscription': openSubscriptionEditor(-1); break;
+    case 'editSubscription': openSubscriptionEditor(parseInt(actionBtn.dataset.index)); break;
+    case 'deleteSubscription': deleteSubscription(parseInt(actionBtn.dataset.index)); break;
+    case 'saveSubscriptions': saveSubscriptions(); break;
+    case 'addSubscriptionReminder': addSubscriptionReminder(); break;
+    case 'runSubscriptionCheck': runSubscriptionCheck(); break;
+    case 'sendSubscriptionTest': sendSubscriptionTest(); break;
   }
 });
 
@@ -174,6 +187,9 @@ document.addEventListener('input', (e) => {
   if (e.target.id === 'pe-image') {
     setImagePreview('pe-image-preview', e.target.value);
   }
+  if (e.target.id === 'sub-search' || e.target.id === 'sub-status-filter') {
+    renderSubscriptionsList();
+  }
 });
 
 // ──────────────────────────────────────────
@@ -186,10 +202,12 @@ async function loadAllData() {
       ...sections.map(s => apiCall(`/api/portfolio/${s}`, 'GET')),
       apiCall('/api/admin/settings', 'GET'),
       apiCall('/api/admin/site', 'GET'),
+      apiCall('/api/admin/subscriptions', 'GET'),
     ]);
     sections.forEach((s, i) => currentData[s] = results[i]);
     currentSettings = results[sections.length];
     currentSite = results[sections.length + 1];
+    subscriptionsData = results[sections.length + 2];
     populateProfile(currentData.profile);
     populateSkills(currentData.skills);
     populateInterests(currentData.interests);
@@ -198,6 +216,7 @@ async function loadAllData() {
     populateProjects(currentData.projects);
     populateSettings(currentSettings);
     populateSite(currentSite);
+    populateSubscriptions(subscriptionsData);
     initSortable();
   } catch (err) {
     showToast('Error loading data: ' + err.message, true);
@@ -333,6 +352,308 @@ function collectContact() {
     phones: collectDynamicItems('c-phones-list', ['number', 'tel']),
     socialLinks: collectDynamicItems('c-social-list', ['platform', 'url', 'icon']),
   };
+}
+
+// ──────────────────────────────────────────
+// SUBSCRIPTIONS
+// ──────────────────────────────────────────
+function populateSubscriptions(data) {
+  subscriptionsData = data || { settings: {}, subscriptions: [], reminderHistory: [], summary: {} };
+  const settings = subscriptionsData.settings || {};
+
+  document.getElementById('sub-recipient').value = settings.recipientEmail || '';
+  document.getElementById('sub-timezone').value = settings.timezone || 'Africa/Kampala';
+  document.getElementById('sub-default-time').value = settings.defaultReminderTime || '09:00';
+  document.getElementById('sub-enabled').checked = settings.enabled !== false;
+  document.getElementById('sub-digest').checked = settings.digest !== false;
+
+  renderSubscriptionMetrics();
+  renderSubscriptionsList();
+}
+
+function renderSubscriptionMetrics() {
+  const summary = subscriptionsData.summary || {};
+  document.getElementById('sub-metric-total').textContent = summary.total || 0;
+  document.getElementById('sub-metric-active').textContent = summary.active || 0;
+  document.getElementById('sub-metric-due7').textContent = summary.due7 || 0;
+  document.getElementById('sub-metric-due30').textContent = summary.due30 || 0;
+  document.getElementById('sub-metric-expired').textContent = summary.expired || 0;
+}
+
+function renderSubscriptionsList() {
+  const list = document.getElementById('subscriptions-list');
+  if (!list) return;
+  const search = (document.getElementById('sub-search')?.value || '').toLowerCase().trim();
+  const statusFilter = document.getElementById('sub-status-filter')?.value || '';
+  const subscriptions = subscriptionsData.subscriptions || [];
+  list.innerHTML = '';
+
+  const filtered = subscriptions
+    .map((subscription, index) => ({ subscription, index }))
+    .filter(({ subscription }) => {
+      const status = subscription.computedStatus || subscription.status || 'active';
+      const statusMatch = !statusFilter || status === statusFilter || subscription.status === statusFilter;
+      const text = [
+        subscription.name,
+        subscription.category,
+        subscription.provider,
+        subscription.client,
+        subscription.accountEmail,
+        subscription.renewalDate,
+      ].join(' ').toLowerCase();
+      return statusMatch && (!search || text.includes(search));
+    })
+    .sort((a, b) => {
+      const da = a.subscription.renewalDate || '9999-99-99';
+      const db = b.subscription.renewalDate || '9999-99-99';
+      return da.localeCompare(db);
+    });
+
+  if (!filtered.length) {
+    const empty = document.createElement('div');
+    empty.className = 'setting-row';
+    empty.textContent = subscriptions.length ? 'No subscriptions match the current filters.' : 'No subscriptions yet.';
+    list.appendChild(empty);
+    return;
+  }
+
+  filtered.forEach(({ subscription, index }) => {
+    const status = subscription.computedStatus || subscription.status || 'active';
+    const days = typeof subscription.daysLeft === 'number' ? subscription.daysLeft : '';
+    const meta = [
+      subscription.provider || 'No provider',
+      subscription.category || 'No category',
+      subscription.client ? `Client: ${subscription.client}` : '',
+      subscription.renewalDate ? `Renews: ${subscription.renewalDate}` : '',
+      days !== '' ? `${days} day${days === 1 ? '' : 's'} left` : '',
+      subscription.cost ? `${subscription.currency || ''} ${subscription.cost}` : '',
+    ].filter(Boolean).join(' | ');
+    const div = document.createElement('div');
+    div.className = 'subscription-list-item';
+    div.innerHTML = `
+      <div>
+        <div class="subscription-title">${escHtml(subscription.name || 'Untitled subscription')}</div>
+        <div class="subscription-meta">${escHtml(meta)}</div>
+      </div>
+      <span class="subscription-status ${escHtml(status)}">${escHtml(subscriptionStatusLabel(status))}</span>
+      <div class="subscription-actions">
+        <button class="btn btn-outline-light" data-action="editSubscription" data-index="${index}" title="Edit"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-outline-danger" data-action="deleteSubscription" data-index="${index}" title="Delete"><i class="bi bi-trash"></i></button>
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+function subscriptionStatusLabel(status) {
+  const labels = {
+    active: 'Active',
+    'due-soon': 'Due Soon',
+    'due-week': 'Due This Week',
+    expired: 'Expired',
+    paused: 'Paused',
+    cancelled: 'Cancelled',
+    archived: 'Archived',
+    unknown: 'Unknown',
+  };
+  return labels[status] || status;
+}
+
+function collectSubscriptionsPayload() {
+  return {
+    settings: {
+      enabled: document.getElementById('sub-enabled').checked,
+      recipientEmail: document.getElementById('sub-recipient').value,
+      timezone: document.getElementById('sub-timezone').value || 'Africa/Kampala',
+      defaultReminderTime: document.getElementById('sub-default-time').value || '09:00',
+      digest: document.getElementById('sub-digest').checked,
+    },
+    subscriptions: (subscriptionsData.subscriptions || []).map(stripSubscriptionComputedFields),
+    reminderHistory: subscriptionsData.reminderHistory || [],
+  };
+}
+
+function stripSubscriptionComputedFields(subscription) {
+  const copy = { ...subscription };
+  delete copy.daysLeft;
+  delete copy.computedStatus;
+  return copy;
+}
+
+async function saveSubscriptions(showMessage = true) {
+  try {
+    const result = await apiCall('/api/admin/subscriptions', 'PUT', collectSubscriptionsPayload());
+    subscriptionsData = result.data || subscriptionsData;
+    populateSubscriptions(subscriptionsData);
+    if (showMessage) showToast('Subscriptions saved successfully!');
+    return true;
+  } catch (err) {
+    showToast('Error saving subscriptions: ' + err.message, true);
+    return false;
+  }
+}
+
+function openSubscriptionEditor(index) {
+  const isEdit = index >= 0 && index < (subscriptionsData.subscriptions || []).length;
+  const d = isEdit ? subscriptionsData.subscriptions[index] : {
+    status: 'active',
+    billingCycle: 'yearly',
+    currency: 'USD',
+    reminders: [
+      { offsetDays: 60, time: subscriptionsData.settings?.defaultReminderTime || '09:00', enabled: true },
+      { offsetDays: 30, time: subscriptionsData.settings?.defaultReminderTime || '09:00', enabled: true },
+      { offsetDays: 14, time: subscriptionsData.settings?.defaultReminderTime || '09:00', enabled: true },
+      { offsetDays: 7, time: subscriptionsData.settings?.defaultReminderTime || '09:00', enabled: true },
+      { offsetDays: 1, time: subscriptionsData.settings?.defaultReminderTime || '09:00', enabled: true },
+    ],
+  };
+
+  document.getElementById('subscriptionEditorModalLabel').innerHTML = isEdit
+    ? '<i class="bi bi-pencil"></i> Edit Subscription'
+    : '<i class="bi bi-plus-lg"></i> New Subscription';
+  document.getElementById('se-id').value = d.id || '';
+  document.getElementById('se-index').value = index;
+  document.getElementById('se-name').value = d.name || '';
+  document.getElementById('se-category').value = d.category || '';
+  document.getElementById('se-provider').value = d.provider || '';
+  document.getElementById('se-client').value = d.client || '';
+  document.getElementById('se-account-email').value = d.accountEmail || '';
+  document.getElementById('se-status').value = d.status || 'active';
+  document.getElementById('se-renewal-date').value = d.renewalDate || '';
+  document.getElementById('se-billing-cycle').value = d.billingCycle || 'yearly';
+  document.getElementById('se-cost').value = d.cost || '';
+  document.getElementById('se-currency').value = d.currency || 'USD';
+  document.getElementById('se-auto-renew').checked = !!d.autoRenew;
+  document.getElementById('se-service-url').value = d.serviceUrl || '';
+  document.getElementById('se-renewal-url').value = d.renewalUrl || '';
+  document.getElementById('se-notes').value = d.notes || '';
+
+  const reminderList = document.getElementById('se-reminders-list');
+  reminderList.innerHTML = '';
+  (d.reminders || []).forEach(reminder => addSubscriptionReminder(reminder));
+  if (!reminderList.children.length) addSubscriptionReminder();
+
+  const modal = new bootstrap.Modal(document.getElementById('subscriptionEditorModal'));
+  modal.show();
+}
+
+function addSubscriptionReminder(reminder) {
+  const list = document.getElementById('se-reminders-list');
+  if (!list) return;
+  const data = reminder || {
+    offsetDays: 30,
+    time: subscriptionsData.settings?.defaultReminderTime || '09:00',
+    enabled: true,
+  };
+  const div = document.createElement('div');
+  div.className = 'dynamic-item reminder-row';
+  div.innerHTML = `
+    <button class="btn btn-outline-danger remove-btn" type="button"><i class="bi bi-x"></i></button>
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">Days Before Renewal</label>
+        <input type="number" min="0" max="3650" class="form-control" data-field="offsetDays" value="${escHtml(String(data.offsetDays ?? 30))}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Reminder Time</label>
+        <input type="time" class="form-control" data-field="time" value="${escHtml(data.time || subscriptionsData.settings?.defaultReminderTime || '09:00')}">
+      </div>
+      <div class="col-md-4">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" data-field="enabled" ${data.enabled !== false ? 'checked' : ''}>
+          <label class="form-check-label">Enabled</label>
+        </div>
+      </div>
+    </div>`;
+  list.appendChild(div);
+}
+
+function collectSubscriptionFromModal() {
+  const reminders = Array.from(document.querySelectorAll('#se-reminders-list .reminder-row')).map(row => ({
+    offsetDays: parseInt(row.querySelector('[data-field="offsetDays"]').value, 10) || 0,
+    time: row.querySelector('[data-field="time"]').value || subscriptionsData.settings?.defaultReminderTime || '09:00',
+    enabled: row.querySelector('[data-field="enabled"]').checked,
+  }));
+
+  return {
+    id: document.getElementById('se-id').value || crypto.randomUUID(),
+    name: document.getElementById('se-name').value.trim(),
+    category: document.getElementById('se-category').value.trim(),
+    provider: document.getElementById('se-provider').value.trim(),
+    client: document.getElementById('se-client').value.trim(),
+    accountEmail: document.getElementById('se-account-email').value.trim(),
+    status: document.getElementById('se-status').value,
+    renewalDate: document.getElementById('se-renewal-date').value,
+    billingCycle: document.getElementById('se-billing-cycle').value,
+    cost: parseFloat(document.getElementById('se-cost').value) || 0,
+    currency: document.getElementById('se-currency').value.trim() || 'USD',
+    autoRenew: document.getElementById('se-auto-renew').checked,
+    serviceUrl: document.getElementById('se-service-url').value.trim(),
+    renewalUrl: document.getElementById('se-renewal-url').value.trim(),
+    notes: document.getElementById('se-notes').value.trim(),
+    reminders,
+  };
+}
+
+async function saveSubscriptionFromModal() {
+  const index = parseInt(document.getElementById('se-index').value, 10);
+  const subscription = collectSubscriptionFromModal();
+  if (!subscription.name) {
+    showToast('Subscription name is required', true);
+    return;
+  }
+  if (!subscription.renewalDate) {
+    showToast('Renewal date is required', true);
+    return;
+  }
+
+  const list = subscriptionsData.subscriptions || [];
+  if (index >= 0 && index < list.length) {
+    list[index] = { ...stripSubscriptionComputedFields(list[index]), ...subscription };
+  } else {
+    list.push(subscription);
+  }
+  subscriptionsData.subscriptions = list;
+
+  const saved = await saveSubscriptions(false);
+  if (saved) {
+    bootstrap.Modal.getInstance(document.getElementById('subscriptionEditorModal')).hide();
+    showToast('Subscription saved successfully!');
+  }
+}
+
+async function deleteSubscription(index) {
+  const list = subscriptionsData.subscriptions || [];
+  if (index < 0 || index >= list.length) return;
+  if (!window.confirm(`Delete ${list[index].name || 'this subscription'}?`)) return;
+  list.splice(index, 1);
+  subscriptionsData.subscriptions = list;
+  await saveSubscriptions(false);
+  showToast('Subscription deleted.');
+}
+
+async function runSubscriptionCheck() {
+  try {
+    const saved = await saveSubscriptions(false);
+    if (!saved) return;
+    const result = await apiCall('/api/admin/subscriptions/reminders/run', 'POST', { dryRun: false });
+    const message = result.sent
+      ? result.message
+      : `${result.message} (${result.count || 0} due)`;
+    showToast(message);
+    await loadAllData();
+  } catch (err) {
+    showToast('Reminder check failed: ' + err.message, true);
+  }
+}
+
+async function sendSubscriptionTest() {
+  try {
+    const recipientEmail = document.getElementById('sub-recipient').value;
+    const result = await apiCall('/api/admin/subscriptions/test-email', 'POST', { recipientEmail });
+    showToast(result.message || 'Test reminder email sent.');
+  } catch (err) {
+    showToast('Test email failed: ' + err.message, true);
+  }
 }
 
 // ──────────────────────────────────────────
@@ -1047,6 +1368,7 @@ document.addEventListener('click', (e) => {
 }, true); // capture phase to intercept before other handlers
 
 // Wire up the modal save button
+document.getElementById('se-save-btn').addEventListener('click', saveSubscriptionFromModal);
 document.getElementById('pe-save-btn').addEventListener('click', saveProjectFromModal);
 
 // ──────────────────────────────────────────

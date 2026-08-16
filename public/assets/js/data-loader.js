@@ -397,96 +397,245 @@ document.addEventListener('DOMContentLoaded', async function () {
   // ──────────────────────────────────────────────
   // 4. RESUME
   // ──────────────────────────────────────────────
-  function renderResumeItem(item, hasBullets) {
-    const div = el('div', 'resume-item');
-    div.appendChild(el('h4', null, item.title));
+  function getResumeOrganization(item) {
+    return item.organization || item.institution || '';
+  }
 
-    if (item.organization || item.institution) {
-      const p = document.createElement('p');
-      const em = el('em', null, item.organization || item.institution);
-      p.appendChild(em);
-      div.appendChild(p);
+  function isCurrentResumeItem(item) {
+    return /\bpresent\b/i.test(item.period || '');
+  }
+
+  function deriveResumeTags(item) {
+    const text = [
+      item.title,
+      getResumeOrganization(item),
+      item.description,
+      ...(item.bullets || []),
+    ].join(' ').toLowerCase();
+    const tagRules = [
+      ['Leadership', ['lead', 'principal', 'coordinat', 'mentor', 'team']],
+      ['Systems', ['system', 'infrastructure', 'database', 'server']],
+      ['Software', ['software', 'application', 'develop', 'api', 'website']],
+      ['Data', ['database', 'data', 'analysis', 'statistical']],
+      ['Security', ['security', 'integrity', 'backup', 'recovery']],
+      ['AI/IoT', ['ai', 'iot', 'remote sensing', 'smart']],
+      ['Renewable Energy', ['renewable', 'energy', 'nrep']],
+      ['Research', ['research', 'publication', 'workshop']],
+    ];
+    return tagRules
+      .filter(([, keywords]) => keywords.some(keyword => text.includes(keyword)))
+      .map(([label]) => label)
+      .slice(0, 4);
+  }
+
+  function appendResumePill(container, text, className) {
+    if (!text) return;
+    const pill = el('span', className || 'resume-pill', text);
+    container.appendChild(pill);
+  }
+
+  function renderResumeCard(item, options) {
+    const card = el('article', 'resume-card' + (isCurrentResumeItem(item) ? ' is-current' : ''));
+    const header = el('div', 'resume-card-header');
+    const titleWrap = el('div', 'resume-card-title-wrap');
+    const title = el('h4', null, item.title || 'Untitled');
+    titleWrap.appendChild(title);
+
+    const org = getResumeOrganization(item);
+    if (org) {
+      titleWrap.appendChild(el('p', 'resume-org', org));
+    }
+    header.appendChild(titleWrap);
+
+    const badges = el('div', 'resume-card-badges');
+    if (isCurrentResumeItem(item)) appendResumePill(badges, 'Current', 'resume-pill resume-pill-current');
+    appendResumePill(badges, item.period, 'resume-pill');
+    header.appendChild(badges);
+    card.appendChild(header);
+
+    const tags = deriveResumeTags(item);
+    if (tags.length) {
+      const tagWrap = el('div', 'resume-tag-list');
+      tags.forEach(tag => appendResumePill(tagWrap, tag, 'resume-tag'));
+      card.appendChild(tagWrap);
     }
 
-    if (item.period) {
-      div.appendChild(el('h5', null, item.period));
-    }
+    if (options.hasBullets && item.bullets && item.bullets.length) {
+      const list = el('ul', 'resume-bullets');
+      const visibleCount = options.compact ? 3 : item.bullets.length;
+      item.bullets.forEach((bullet, index) => {
+        const li = el('li', null, bullet);
+        if (index >= visibleCount) {
+          li.hidden = true;
+          li.className = 'resume-extra';
+        }
+        list.appendChild(li);
+      });
+      card.appendChild(list);
 
-    if (hasBullets && item.bullets && item.bullets.length) {
-      const ul = document.createElement('ul');
-      item.bullets.forEach(b => ul.appendChild(el('li', null, b)));
-      div.appendChild(ul);
+      const hiddenCount = item.bullets.length - visibleCount;
+      if (hiddenCount > 0) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'resume-expand';
+        button.textContent = `Show ${hiddenCount} more`;
+        button.setAttribute('aria-expanded', 'false');
+        button.addEventListener('click', () => {
+          const expanded = button.getAttribute('aria-expanded') === 'true';
+          list.querySelectorAll('.resume-extra').forEach(li => { li.hidden = expanded; });
+          button.setAttribute('aria-expanded', String(!expanded));
+          button.textContent = expanded ? `Show ${hiddenCount} more` : 'Show less';
+        });
+        card.appendChild(button);
+      }
     } else if (item.description) {
-      div.appendChild(el('p', null, item.description));
+      card.appendChild(el('p', 'resume-description', item.description));
     }
 
     if (item.publicationUrl) {
-      const p = document.createElement('p');
-      const a = document.createElement('a');
-      a.href = item.publicationUrl;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.textContent = item.publicationTitle || 'View Publication';
-      p.appendChild(a);
-      div.appendChild(p);
+      const href = sanitizeUrl(item.publicationUrl);
+      if (href) {
+        const link = document.createElement('a');
+        link.className = 'resume-link';
+        link.href = href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = item.publicationTitle || 'View Publication';
+        card.appendChild(link);
+      }
     }
 
-    return div;
+    return card;
+  }
+
+  function renderResumeOverview(data, tabs) {
+    const overview = document.getElementById('resume-overview');
+    if (!overview) return;
+    overview.innerHTML = '';
+
+    const currentRole = (data.experience || []).find(isCurrentResumeItem) || (data.experience || [])[0];
+    const totalExperience = (data.experience || []).length;
+    const totalEducation = (data.education || []).length;
+    const totalCertifications = (data.certifications || []).length;
+    const totalResearch = (data.research || []).length;
+
+    const intro = el('div', 'resume-overview-intro');
+    intro.appendChild(el('span', 'resume-kicker', 'Professional profile'));
+    intro.appendChild(el('h3', null, data.summary?.name || 'Resume'));
+    intro.appendChild(el('p', null, data.summary?.text || ''));
+
+    const metrics = el('div', 'resume-metrics');
+    [
+      [totalExperience, 'Roles'],
+      [totalEducation, 'Degrees'],
+      [totalCertifications, 'Certifications'],
+      [totalResearch, 'Research'],
+    ].forEach(([value, label]) => {
+      const metric = el('div', 'resume-metric');
+      metric.appendChild(el('strong', null, String(value)));
+      metric.appendChild(el('span', null, label));
+      metrics.appendChild(metric);
+    });
+    intro.appendChild(metrics);
+
+    const spotlight = el('aside', 'resume-current');
+    spotlight.appendChild(el('span', 'resume-kicker', 'Current focus'));
+    if (currentRole) {
+      spotlight.appendChild(el('h4', null, currentRole.title || 'Current role'));
+      spotlight.appendChild(el('p', null, getResumeOrganization(currentRole)));
+      const meta = el('div', 'resume-current-meta');
+      appendResumePill(meta, currentRole.period, 'resume-pill resume-pill-current');
+      deriveResumeTags(currentRole).slice(0, 3).forEach(tag => appendResumePill(meta, tag, 'resume-tag'));
+      spotlight.appendChild(meta);
+    }
+
+    const quickNav = el('div', 'resume-quick-nav');
+    tabs.forEach(tab => {
+      appendResumePill(quickNav, `${tab.items.length} ${tab.shortLabel}`, 'resume-mini-stat');
+    });
+    spotlight.appendChild(quickNav);
+
+    overview.appendChild(intro);
+    overview.appendChild(spotlight);
+  }
+
+  function buildResumeTabs(data) {
+    const areaItems = data.areasOfInterest?.title || data.areasOfInterest?.description
+      ? [{
+        title: data.areasOfInterest.title || 'Areas of Interest',
+        description: data.areasOfInterest.description || '',
+        institution: '',
+        period: '',
+      }]
+      : [];
+    return [
+      { id: 'experience', label: 'Experience', shortLabel: 'roles', items: data.experience || [], hasBullets: true, compact: true },
+      { id: 'education', label: 'Education', shortLabel: 'degrees', items: data.education || [], hasBullets: false, compact: false },
+      { id: 'certifications', label: 'Certifications', shortLabel: 'certs', items: data.certifications || [], hasBullets: false, compact: false },
+      { id: 'honors', label: 'Honors', shortLabel: 'honors', items: data.honors || [], hasBullets: false, compact: false },
+      { id: 'research', label: 'Research', shortLabel: 'items', items: data.research || [], hasBullets: true, compact: true },
+      { id: 'interests', label: 'Interests', shortLabel: 'areas', items: areaItems, hasBullets: false, compact: false },
+    ].filter(tab => tab.items.length);
   }
 
   function renderResume(data) {
     if (!data) return;
 
-    const leftCol = document.getElementById('resume-left');
-    const rightCol = document.getElementById('resume-right');
-    if (!leftCol || !rightCol) return;
-    leftCol.innerHTML = '';
-    rightCol.innerHTML = '';
+    const tabsWrap = document.getElementById('resume-tabs');
+    const panelsWrap = document.getElementById('resume-panels');
+    if (!tabsWrap || !panelsWrap) return;
 
-    // LEFT COLUMN: Summary + Professional Experience
-    if (data.summary) {
-      leftCol.appendChild(el('h3', 'resume-title', 'Summary'));
-      const summaryDiv = el('div', 'resume-item pb-0');
-      summaryDiv.appendChild(el('h4', null, data.summary.name));
-      summaryDiv.appendChild(el('p', null, data.summary.text));
-      leftCol.appendChild(summaryDiv);
-    }
+    const tabs = buildResumeTabs(data);
+    tabsWrap.innerHTML = '';
+    panelsWrap.innerHTML = '';
+    renderResumeOverview(data, tabs);
 
-    if (data.experience && data.experience.length) {
-      leftCol.appendChild(el('h3', 'resume-title', 'Professional Experience'));
-      data.experience.forEach(exp => leftCol.appendChild(renderResumeItem(exp, true)));
-    }
+    tabs.forEach((tab, index) => {
+      const isActive = index === 0;
+      const tabButton = document.createElement('button');
+      tabButton.type = 'button';
+      tabButton.className = 'resume-tab' + (isActive ? ' active' : '');
+      tabButton.id = `resume-tab-${tab.id}`;
+      tabButton.setAttribute('role', 'tab');
+      tabButton.setAttribute('aria-selected', String(isActive));
+      tabButton.setAttribute('aria-controls', `resume-panel-${tab.id}`);
+      tabButton.textContent = tab.label;
+      tabsWrap.appendChild(tabButton);
 
-    // RIGHT COLUMN: Education, Certifications, Honors, Research, Areas of Interest
-    if (data.education && data.education.length) {
-      rightCol.appendChild(el('h3', 'resume-title', 'Education'));
-      data.education.forEach(edu => rightCol.appendChild(renderResumeItem(edu, false)));
-    }
+      const panel = el('div', 'resume-panel' + (isActive ? ' active' : ''));
+      panel.id = `resume-panel-${tab.id}`;
+      panel.setAttribute('role', 'tabpanel');
+      panel.setAttribute('aria-labelledby', tabButton.id);
+      if (!isActive) panel.hidden = true;
 
-    if (data.certifications && data.certifications.length) {
-      rightCol.appendChild(el('h3', 'resume-title', 'Certifications'));
-      data.certifications.forEach(cert => rightCol.appendChild(renderResumeItem(cert, false)));
-    }
+      const panelHeader = el('div', 'resume-panel-header');
+      panelHeader.appendChild(el('h3', null, tab.label));
+      panelHeader.appendChild(el('span', null, `${tab.items.length} item${tab.items.length === 1 ? '' : 's'}`));
+      panel.appendChild(panelHeader);
 
-    if (data.honors && data.honors.length) {
-      rightCol.appendChild(el('h3', 'resume-title', 'Honors and Awards'));
-      data.honors.forEach(honor => rightCol.appendChild(renderResumeItem(honor, false)));
-    }
+      const grid = el('div', 'resume-card-grid');
+      tab.items.forEach(item => grid.appendChild(renderResumeCard(item, {
+        hasBullets: tab.hasBullets,
+        compact: tab.compact,
+      })));
+      panel.appendChild(grid);
+      panelsWrap.appendChild(panel);
 
-    if (data.research && data.research.length) {
-      rightCol.appendChild(el('h3', 'resume-title', 'Research Experience'));
-      data.research.forEach(r => rightCol.appendChild(renderResumeItem(r, true)));
-    }
-
-    if (data.areasOfInterest) {
-      rightCol.appendChild(el('h3', 'resume-title', 'Areas of Interest'));
-      const aoiDiv = el('div', 'resume-item pb-0');
-      const aoiP1 = document.createElement('p');
-      aoiP1.appendChild(el('em', null, data.areasOfInterest.title));
-      aoiDiv.appendChild(aoiP1);
-      aoiDiv.appendChild(el('p', null, data.areasOfInterest.description));
-      rightCol.appendChild(aoiDiv);
-    }
+      tabButton.addEventListener('click', () => {
+        tabsWrap.querySelectorAll('.resume-tab').forEach(button => {
+          button.classList.remove('active');
+          button.setAttribute('aria-selected', 'false');
+        });
+        panelsWrap.querySelectorAll('.resume-panel').forEach(item => {
+          item.classList.remove('active');
+          item.hidden = true;
+        });
+        tabButton.classList.add('active');
+        tabButton.setAttribute('aria-selected', 'true');
+        panel.classList.add('active');
+        panel.hidden = false;
+      });
+    });
   }
 
   // ──────────────────────────────────────────────

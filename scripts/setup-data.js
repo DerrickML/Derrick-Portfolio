@@ -2,9 +2,10 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config();
 
 const ROOT_DIR = path.join(__dirname, '..');
-const DATA_DIR = path.join(ROOT_DIR, 'data');
+const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT_DIR, 'data'));
 const ENV_FILE = path.join(ROOT_DIR, '.env');
 const FORCE = process.argv.includes('--force');
 
@@ -18,8 +19,8 @@ function writeJsonIfMissing(fileName, data) {
   if (existed && !FORCE) {
     return { fileName, action: 'kept' };
   }
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   return { fileName, action: existed ? 'rewrote' : 'created' };
 }
 
@@ -96,7 +97,7 @@ function setupEnv() {
       `CRON_SECRET=${randomSecret()}`,
       '',
     ];
-    fs.writeFileSync(ENV_FILE, lines.join('\n'), 'utf8');
+    fs.writeFileSync(ENV_FILE, lines.join('\n'), { encoding: 'utf8', mode: 0o600 });
     return {
       action: 'created',
       adminHashGenerated: Boolean(adminPassword),
@@ -256,7 +257,7 @@ const files = {
 };
 
 function main() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
   const envResult = setupEnv();
   const results = Object.entries(files).map(([fileName, data]) => writeJsonIfMissing(fileName, data));
 

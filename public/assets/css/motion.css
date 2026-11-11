@@ -1,0 +1,83 @@
+/* Compositing-only enhancements over the original portfolio theme. */
+.reading-progress {
+  position: fixed;
+  top: 80px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  z-index: 996;
+  background: #18d26e;
+  transform: scaleX(var(--reading-progress, 0));
+  transform-origin: left center;
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .reading-progress { top: 60px; }
+}
+
+.projects .project-card .card-img-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(220px circle at var(--halo-x, 50%) var(--halo-y, 50%), rgba(24, 210, 110, .12), transparent 72%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.projects .project-card:focus-visible {
+  border-color: rgba(24, 210, 110, .4);
+  box-shadow: 0 12px 40px rgba(24, 210, 110, .15);
+}
+
+.projects .project-card:focus-visible .card-img-overlay,
+.projects .project-card:focus-visible .card-img-wrap::after { opacity: 1; }
+
+@media (prefers-reduced-motion: no-preference) {
+  :is(.resume-tab, .filter-btn, #submitButton, .mobile-nav-toggle, .social-links a) {
+    transition: transform 160ms ease, background-color 180ms ease, border-color 180ms ease;
+  }
+
+  :is(.resume-tab, .filter-btn, #submitButton, .mobile-nav-toggle, .social-links a):active {
+    transform: scale(.96);
+  }
+
+  @supports (animation-timeline: view()) {
+    /* Clip without creating a nested scroll container; the page drives these timelines. */
+    section.section-show { overflow: clip; }
+
+    /* At least 84% opaque, never hidden; unsupported browsers show the original cards. */
+    .section-show :is(.resume-card, .project-card-col, .info-box) {
+      animation: card-arrival 1s linear both;
+      animation-timeline: view(block);
+      animation-range: entry 0% entry 90%;
+    }
+  }
+}
+
+@keyframes card-arrival {
+  from { opacity: .84; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  body::before { transition: transform 500ms ease-out; }
+  body.has-pointer-depth::before {
+    transform: translate3d(var(--depth-x, 0px), var(--depth-y, 0px), 0) scale(1.015);
+  }
+  .projects .project-card:hover { transform: translateY(-4px); }
+  .projects .project-card:hover .card-img-wrap::after { opacity: 1; }
+  .social-links a:hover { transform: translateY(-2px); }
+  .social-links a:active { transform: scale(.96); }
+}
+
+@media (hover: none), (prefers-reduced-motion: reduce) {
+  .projects .project-card:hover,
+  .projects .project-card:hover .card-img-wrap img { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reading-progress { display: none !important; }
+  body.has-pointer-depth::before { transform: none; }
+}

@@ -6,11 +6,13 @@
   "scripts": {
     "setup": "node scripts/setup-data.js",
     "setup:data": "node scripts/setup-data.js",
-    "test": "node --check server.js && node --check scripts/setup-data.js && node --check public/assets/js/admin.js && node --check public/assets/js/contact-form.js && node --check public/assets/js/data-loader.js && node --check public/assets/js/main.js && node --check public/assets/js/projects-loader.js && node --check public/assets/js/testimonials.js && node --check workers/subscription-reminder-cron.mjs",
+    "restore:backup": "node scripts/restore-backup.js",
+    "test": "npm run check && node --test tests/*.test.js",
+    "check": "node --check server.js && node --check scripts/setup-data.js && node --check scripts/restore-backup.js && node --check public/assets/js/admin.js && node --check public/assets/js/public-data.js && node --check public/assets/js/contact-form.js && node --check public/assets/js/data-loader.js && node --check public/assets/js/main.js && node --check public/assets/js/motion.js && node --check public/assets/js/projects-loader.js && node --check public/assets/js/testimonials.js && node --check workers/subscription-reminder-cron.mjs",
     "start": "node server.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.9.0"
   },
   "author": "Derrick L. Mayiku",
   "license": "ISC",
@@ -21,8 +23,13 @@
     "express-rate-limit": "^8.5.2",
     "express-session": "^1.19.0",
     "helmet": "^8.1.0",
+    "ipaddr.js": "^2.5.0",
     "node-fetch": "^2.7.0",
-    "nodemailer": "^9.0.1"
+    "nodemailer": "^9.1.1",
+    "sanitize-html": "^2.17.7",
+    "session-file-store": "^1.5.0",
+    "sharp": "^0.35.4",
+    "zod": "^4.6.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"

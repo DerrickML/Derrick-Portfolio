@@ -7,8 +7,8 @@ document.addEventListener('DOMContentLoaded', function () {
   let siteLabels = {};
 
   Promise.all([
-    fetch('/api/portfolio/projects').then(res => res.json()),
-    fetch('/api/site').then(res => res.ok ? res.json() : null).catch(() => null),
+    window.PortfolioData.fetchJson('/api/portfolio/projects'),
+    window.PortfolioData.fetchJson('/api/site').catch(() => null),
   ])
     .then(([projects, site]) => {
       allProjects = Array.isArray(projects) ? projects : [];
@@ -16,7 +16,10 @@ document.addEventListener('DOMContentLoaded', function () {
       renderFilters(allProjects);
       renderCards(allProjects);
     })
-    .catch(err => console.error('Error loading projects:', err));
+    .catch(() => {
+      const message = document.createElement('p'); message.textContent = 'Projects are temporarily unavailable.';
+      message.setAttribute('role', 'status'); document.getElementById('projects-grid').replaceChildren(message);
+    });
 
   // ─── FILTERS ─────────────────────────────────
   function renderFilters(projects) {
@@ -26,6 +29,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const allBtn = document.createElement('button');
     allBtn.className = 'filter-btn active';
     allBtn.dataset.filter = '*';
+    allBtn.setAttribute('aria-pressed', 'true');
     allBtn.textContent = siteLabels.allFilterLabel || 'All';
     container.appendChild(allBtn);
 
@@ -36,6 +40,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const btn = document.createElement('button');
       btn.className = 'filter-btn';
       btn.dataset.filter = cat;
+      btn.setAttribute('aria-pressed', 'false');
       btn.textContent = cat;
       container.appendChild(btn);
     });
@@ -45,22 +50,16 @@ document.addEventListener('DOMContentLoaded', function () {
       const btn = e.target.closest('.filter-btn');
       if (!btn) return;
 
-      container.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      container.querySelectorAll('.filter-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
       btn.classList.add('active');
+      btn.setAttribute('aria-pressed', 'true');
 
       const filter = btn.dataset.filter;
       const cards = document.querySelectorAll('#projects-grid .project-card-col');
       cards.forEach(card => {
         if (filter === '*' || card.dataset.category === filter) {
           card.style.display = '';
-          // Animate in
-          card.style.opacity = '0';
-          card.style.transform = 'translateY(20px)';
-          requestAnimationFrame(() => {
-            card.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-            card.style.opacity = '1';
-            card.style.transform = 'translateY(0)';
-          });
+          // Cards stay readable; motion.css enhances entry where scroll timelines are supported.
         } else {
           card.style.display = 'none';
         }
@@ -72,26 +71,29 @@ document.addEventListener('DOMContentLoaded', function () {
   function renderCards(projects) {
     const grid = document.getElementById('projects-grid');
     grid.innerHTML = '';
+    if (!projects.length) { const empty = document.createElement('p'); empty.textContent = 'No projects published yet.'; grid.appendChild(empty); }
 
     projects.forEach((project, index) => {
       const col = document.createElement('div');
       col.className = 'col-lg-4 col-md-6 project-card-col';
       col.dataset.category = project.category || '';
-      // Staggered entrance animation
-      col.style.opacity = '0';
-      col.style.transform = 'translateY(30px)';
+
 
       const card = document.createElement('div');
       card.className = 'project-card';
       card.dataset.index = index;
+      card.tabIndex = 0;
+      card.setAttribute('role', 'button');
+      card.setAttribute('aria-label', `${siteLabels.viewDetailsLabel || 'View details'}: ${project.title || 'Project'}`);
+      card.setAttribute('aria-haspopup', 'dialog');
 
       // Image area
       const imgWrap = document.createElement('div');
       imgWrap.className = 'card-img-wrap';
 
-      if (project.image) {
+      if (window.PortfolioData.safeUrl(project.image)) {
         const img = document.createElement('img');
-        img.src = project.image;
+        img.src = window.PortfolioData.safeUrl(project.image);
         img.alt = project.title || 'Project image';
         img.loading = 'lazy';
         // Fallback on error
@@ -183,15 +185,11 @@ document.addEventListener('DOMContentLoaded', function () {
       col.appendChild(card);
       grid.appendChild(col);
 
-      // Staggered entrance animation
-      setTimeout(() => {
-        col.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-        col.style.opacity = '1';
-        col.style.transform = 'translateY(0)';
-      }, 100 + index * 100);
+
 
       // Click → open modal
       card.addEventListener('click', () => openProjectModal(project));
+      card.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openProjectModal(project); } });
     });
   }
 
@@ -203,8 +201,8 @@ document.addEventListener('DOMContentLoaded', function () {
     // Image
     const imgWrap = document.getElementById('pm-image-wrap');
     const img = document.getElementById('pm-image');
-    if (project.image) {
-      img.src = project.image;
+    if (window.PortfolioData.safeUrl(project.image)) {
+      img.src = window.PortfolioData.safeUrl(project.image);
       img.alt = project.title || '';
       imgWrap.style.display = '';
       img.onerror = () => { imgWrap.style.display = 'none'; };
@@ -298,9 +296,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // Links
     const linksContainer = document.getElementById('pm-links');
     linksContainer.innerHTML = '';
-    if (project.liveUrl) {
+    if (window.PortfolioData.safeUrl(project.liveUrl)) {
       const a = document.createElement('a');
-      a.href = project.liveUrl;
+      a.href = window.PortfolioData.safeUrl(project.liveUrl);
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       a.className = 'pm-link-live';
@@ -308,9 +306,9 @@ document.addEventListener('DOMContentLoaded', function () {
       a.appendChild(document.createTextNode(' ' + (siteLabels.liveDemoLabel || 'Live Demo')));
       linksContainer.appendChild(a);
     }
-    if (project.repoUrl) {
+    if (window.PortfolioData.safeUrl(project.repoUrl)) {
       const a = document.createElement('a');
-      a.href = project.repoUrl;
+      a.href = window.PortfolioData.safeUrl(project.repoUrl);
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       a.className = 'pm-link-repo';
@@ -320,7 +318,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('projectModal'));
+    const opener = document.activeElement;
+    document.getElementById('projectModal').addEventListener('hidden.bs.modal', () => opener?.focus(), { once: true });
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('projectModal'));
     modal.show();
   }
 

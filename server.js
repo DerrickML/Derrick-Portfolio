@@ -3,23 +3,37 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
-const fetch = require('node-fetch');
+const { publicFetch } = require('./lib/outbound');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
+const FileStore = require('session-file-store')(session);
+const sharp = require('sharp');
+const { validate, validateSite, validateSubscriptions, safeUrl } = require('./lib/content');
+const { createStorage, writeAtomic, CONTENT_SECTIONS } = require('./lib/admin-storage');
 require('dotenv').config();
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
 const PORT = process.env.PORT || 3003;
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'));
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const SITE_FILE = path.join(DATA_DIR, 'site.json');
 const SECRETS_FILE = path.join(DATA_DIR, 'secrets.json');
 const SUBSCRIPTIONS_FILE = path.join(DATA_DIR, 'subscriptions.json');
-const UPLOADS_DIR = path.join(PUBLIC_DIR, 'assets', 'uploads');
+const UPLOADS_DIR = path.resolve(process.env.UPLOADS_DIR || path.join(PUBLIC_DIR, 'assets', 'uploads'));
+function containsPath(parent, child) {
+    const relative = path.relative(parent, child);
+    return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+if (containsPath(PUBLIC_DIR, DATA_DIR) || containsPath(UPLOADS_DIR, DATA_DIR)) {
+    throw new Error('DATA_DIR must not be inside a publicly served directory.');
+}
+const storage = createStorage(DATA_DIR);
+const AUTOMATION_FILE = path.join(DATA_DIR, 'automation.json');
+let reminderScanRunning = false;
 
 const DEFAULT_SETTINGS = {
     email: {
@@ -154,17 +168,7 @@ function readJsonFile(filePath, fallback) {
 }
 
 function writeJsonAtomic(filePath, data) {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    const tmpPath = `${filePath}.${process.pid}.tmp`;
-    try {
-        fs.writeFileSync(tmpPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
-        fs.renameSync(tmpPath, filePath);
-    } catch (err) {
-        if (fs.existsSync(tmpPath)) {
-            fs.unlinkSync(tmpPath);
-        }
-        throw err;
-    }
+    writeAtomic(filePath, data);
 }
 
 function getSettings() {
@@ -336,6 +340,11 @@ function getEmailConfig(settings = getSettings(), secrets = getSecrets()) {
     return { host, port, secure, user, pass, from, to };
 }
 
+function emailConfigVersion(config) {
+    return crypto.createHmac('sha256', process.env.SESSION_SECRET || 'dev-session-secret-change-me')
+        .update(JSON.stringify(config)).digest('hex');
+}
+
 function getAdminPasswordHash() {
     const secrets = getSecrets();
     return secrets.adminPasswordHash || process.env.ADMIN_PASSWORD_HASH || '';
@@ -394,8 +403,8 @@ function sanitizeSubscription(subscription) {
         category: cleanString(subscription?.category, 80),
         provider: cleanString(subscription?.provider, 120),
         client: cleanString(subscription?.client, 120),
-        serviceUrl: cleanString(subscription?.serviceUrl, 2048),
-        renewalUrl: cleanString(subscription?.renewalUrl, 2048),
+        serviceUrl: safeUrl(subscription?.serviceUrl),
+        renewalUrl: safeUrl(subscription?.renewalUrl),
         accountEmail: cleanString(subscription?.accountEmail, 320),
         renewalDate: cleanDateOnly(subscription?.renewalDate),
         billingCycle: allowedCycles.has(billingCycle) ? billingCycle : 'yearly',
@@ -406,7 +415,7 @@ function sanitizeSubscription(subscription) {
         reminders,
         notes: cleanString(subscription?.notes, 5000),
         createdAt: cleanString(subscription?.createdAt, 40) || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        updatedAt: cleanString(subscription?.updatedAt, 40) || new Date().toISOString(),
     };
 }
 
@@ -417,7 +426,7 @@ function sanitizeSubscriptionsData(input) {
         ? source.subscriptions.map(sanitizeSubscription).filter(item => item.name && item.renewalDate)
         : [];
     const reminderHistory = Array.isArray(source.reminderHistory)
-        ? source.reminderHistory.slice(-500).map(item => ({
+        ? source.reminderHistory.slice(-20000).map(item => ({
             key: cleanString(item.key, 300),
             subscriptionId: cleanString(item.subscriptionId, 120),
             subscriptionName: cleanString(item.subscriptionName, 160),
@@ -519,8 +528,8 @@ function decorateSubscriptionsData(data, now = new Date()) {
         if (item.status === 'archived') acc.archived += 1;
         if (item.status === 'active') acc.active += 1;
         if (item.computedStatus === 'expired') acc.expired += 1;
-        if (typeof item.daysLeft === 'number' && item.daysLeft >= 0 && item.daysLeft <= 7) acc.due7 += 1;
-        if (typeof item.daysLeft === 'number' && item.daysLeft >= 0 && item.daysLeft <= 30) acc.due30 += 1;
+        if (item.status === 'active' && typeof item.daysLeft === 'number' && item.daysLeft >= 0 && item.daysLeft <= 7) acc.due7 += 1;
+        if (item.status === 'active' && typeof item.daysLeft === 'number' && item.daysLeft >= 0 && item.daysLeft <= 30) acc.due30 += 1;
         return acc;
     }, { total: 0, active: 0, due7: 0, due30: 0, expired: 0, archived: 0 });
 
@@ -572,6 +581,7 @@ function getDueSubscriptionReminders(data, now = new Date()) {
             if (sentKeys.has(key)) {
                 return;
             }
+            sentKeys.add(key);
             due.push({
                 key,
                 subscriptionId: subscription.id,
@@ -606,6 +616,10 @@ async function sendConfiguredEmail({ to, subject, text, html }) {
         host: emailConfig.host,
         port: emailConfig.port,
         secure: emailConfig.secure,
+        connectionTimeout: 10000,
+        socketTimeout: 20000,
+        disableFileAccess: true,
+        disableUrlAccess: true,
         auth: {
             user: emailConfig.user,
             pass: emailConfig.pass,
@@ -671,6 +685,24 @@ function escapeHtml(value) {
 }
 
 async function runSubscriptionReminderScan({ dryRun = false } = {}) {
+    if (reminderScanRunning) throw Object.assign(new Error('A reminder check is already running.'), { status: 409 });
+    reminderScanRunning = true;
+    try {
+        const result = await scanSubscriptionReminders({ dryRun });
+        if (!dryRun) {
+            writeAtomic(AUTOMATION_FILE, { lastRun: new Date().toISOString(), status: 'success', count: result.count, sent: result.sent });
+            storage.record('Reminders checked', `${result.count} due; ${result.sent ? 'email sent' : 'nothing sent'}`);
+        }
+        return result;
+    } catch (error) {
+        if (!dryRun) writeAtomic(AUTOMATION_FILE, { lastRun: new Date().toISOString(), status: 'failed', message: 'Reminder check failed. Check SMTP configuration and server logs.' });
+        throw error;
+    } finally {
+        reminderScanRunning = false;
+    }
+}
+
+async function scanSubscriptionReminders({ dryRun = false } = {}) {
     const data = sanitizeSubscriptionsData(getSubscriptionsData());
     const { due, zoned } = getDueSubscriptionReminders(data, new Date());
     const recipientEmail = data.settings.recipientEmail || getEmailConfig().to;
@@ -689,7 +721,9 @@ async function runSubscriptionReminderScan({ dryRun = false } = {}) {
         throw new Error('No reminder recipient email is configured.');
     }
 
-    const email = formatReminderEmail(due, zoned);
+    const groups = data.settings.digest ? [due] : due.map(item => [item]);
+    for (const group of groups) {
+    const email = formatReminderEmail(group, zoned);
     await sendConfiguredEmail({
         to: recipientEmail,
         subject: email.subject,
@@ -700,7 +734,7 @@ async function runSubscriptionReminderScan({ dryRun = false } = {}) {
     const sentAt = new Date().toISOString();
     data.reminderHistory = [
         ...(data.reminderHistory || []),
-        ...due.map(item => ({
+        ...group.map(item => ({
             key: item.key,
             subscriptionId: item.subscriptionId,
             subscriptionName: item.subscriptionName,
@@ -709,8 +743,9 @@ async function runSubscriptionReminderScan({ dryRun = false } = {}) {
             sentAt,
             recipientEmail,
         })),
-    ].slice(-500);
+    ].slice(-20000);
     saveSubscriptionsData(data);
+    }
 
     return {
         sent: true,
@@ -742,8 +777,8 @@ function imageMagicMatches(buffer, mimeType) {
     return false;
 }
 
-if (isProduction && !process.env.SESSION_SECRET) {
-    throw new Error('SESSION_SECRET must be set in production.');
+if (isProduction && (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32 || process.env.SESSION_SECRET.startsWith('replace_'))) {
+    throw new Error('SESSION_SECRET must be a random value of at least 32 characters in production.');
 }
 
 if (isProduction) {
@@ -757,7 +792,6 @@ app.use(helmet({
             defaultSrc: ["'self'"],
             scriptSrc: [
                 "'self'",
-                "'unsafe-inline'",
                 "https://cdn.jsdelivr.net",
                 "https://www.googletagmanager.com",
                 "https://www.google-analytics.com",
@@ -782,17 +816,27 @@ app.use(helmet({
                 "https://region1.google-analytics.com",
                 "https://www.google.com",
             ],
+            upgradeInsecureRequests: isProduction ? [] : null,
         },
     },
 }));
 
 // Serve static files from the 'public' folder
+app.use('/assets/uploads', express.static(UPLOADS_DIR, { dotfiles: 'deny', maxAge: '7d', immutable: true }));
+app.use('/admin.html', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 app.use(express.static(PUBLIC_DIR));
 
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '1mb' }));
 
 // Session middleware for admin auth
+fs.mkdirSync(path.join(DATA_DIR, 'sessions'), { recursive: true, mode: 0o700 });
+const sessionStore = new FileStore({
+    path: path.join(DATA_DIR, 'sessions'), ttl: 86400, retries: 0,
+    reapInterval: process.env.NODE_ENV === 'test' ? -1 : 3600,
+    logFn: () => {},
+});
 app.use(session({
+    store: sessionStore,
     secret: process.env.SESSION_SECRET || 'dev-session-secret-change-me',
     resave: false,
     saveUninitialized: false,
@@ -804,6 +848,24 @@ app.use(session({
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
 }));
+
+app.use('/api/admin/check', rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, skip: isAuthenticated, standardHeaders: true, legacyHeaders: false }));
+app.use('/api/admin', (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    if (!req.session.csrfToken && req.path === '/check') req.session.csrfToken = crypto.randomBytes(32).toString('hex');
+    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+    const origin = req.get('origin');
+    const expectedOrigin = `${req.protocol}://${req.get('host')}`;
+    if ((origin && origin !== expectedOrigin) || req.get('sec-fetch-site') === 'cross-site') {
+        return res.status(403).json({ error: 'This request must come from your admin page.' });
+    }
+    const token = Buffer.from(req.get('x-csrf-token') || '');
+    const expectedToken = Buffer.from(req.session.csrfToken || '');
+    if (!expectedToken.length || token.length !== expectedToken.length || !crypto.timingSafeEqual(token, expectedToken)) {
+        return res.status(403).json({ error: 'Session verification failed. Reload the admin page.', code: 'CSRF' });
+    }
+    next();
+});
 
 // Rate limiter for the email endpoint (5 requests per 15 minutes per IP)
 const emailLimiter = rateLimit({
@@ -870,15 +932,16 @@ app.get('/api/testimonials', async (req, res) => {
             return res.status(500).json({ error: 'Testimonials source is not a valid URL.' });
         }
 
-        const response = await fetch(sourceUrl.href);
+        const response = await publicFetch(sourceUrl.href);
         if (!response.ok) {
             throw new Error(`Testimonials source returned ${response.status}`);
         }
-        const data = await response.json();
+        const data = response.data;
+        if (!Array.isArray(data)) throw new Error('Testimonials source must return an array.');
 
         // Map the data to match your frontend structure
         // Normalize keys by trimming whitespace (Google Sheets headers have trailing spaces)
-        const testimonials = data.map(item => {
+        const testimonials = data.filter(isPlainObject).slice(0, 100).map(item => {
             const trimmed = {};
             for (const key of Object.keys(item)) {
                 trimmed[key.trim()] = item[key];
@@ -900,9 +963,21 @@ app.get('/api/testimonials', async (req, res) => {
 
 
 // Define the route for the email sending functionality
+app.get('/api/contact/challenge', rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false }), (req, res) => {
+    const left = crypto.randomInt(1, 10);
+    const right = crypto.randomInt(1, 10);
+    req.session.contactChallenge = { answer: String(left + right), expires: Date.now() + 5 * 60 * 1000 };
+    res.set('Cache-Control', 'no-store').json({ question: `What is ${left} + ${right}?` });
+});
+
 app.post('/send-email', emailLimiter, (req, res) => {
+    const challenge = req.session.contactChallenge;
+    delete req.session.contactChallenge;
+    if (!challenge || challenge.expires < Date.now() || String(req.body?.answer || '').trim() !== challenge.answer) {
+        return res.status(400).json({ error: 'The security answer is incorrect or expired. Please submit the form again.' });
+    }
     // Input validation
-    const { name, email, subject, message } = req.body;
+    const { name, email, subject, message } = req.body || {};
     if (!name || !email || !subject || !message) {
         return res.status(400).json({ error: 'All fields (name, email, subject, message) are required.' });
     }
@@ -926,6 +1001,10 @@ app.post('/send-email', emailLimiter, (req, res) => {
         host: emailConfig.host,
         port: emailConfig.port,
         secure: emailConfig.secure,
+        connectionTimeout: 10000,
+        socketTimeout: 20000,
+        disableFileAccess: true,
+        disableUrlAccess: true,
         auth: {
             user: emailConfig.user,
             pass: emailConfig.pass
@@ -955,11 +1034,61 @@ app.post('/send-email', emailLimiter, (req, res) => {
 /*======= ADMIN PANEL =======*/
 // Auth middleware
 function requireAuth(req, res, next) {
-    if (req.session && req.session.isAdmin) {
+    if (isAuthenticated(req)) {
         return next();
     }
     return res.status(401).json({ error: 'Unauthorized. Please log in.' });
 }
+
+function authVersion() {
+    return crypto.createHash('sha256').update(getAdminPasswordHash()).digest('hex');
+}
+
+function isAuthenticated(req) {
+    return !!(req.session?.isAdmin && req.session.authVersion === authVersion());
+}
+
+function resourceVersion(section) {
+    const metadata = storage.version(section);
+    if (section === 'settings') {
+        metadata.version = crypto.createHash('sha256').update(metadata.version).update(emailConfigVersion(getEmailConfig())).digest('hex');
+    }
+    return metadata;
+}
+
+function setVersion(res, section) {
+    const metadata = resourceVersion(section);
+    res.set('X-Data-Version', metadata.version);
+    if (metadata.savedAt) res.set('X-Saved-At', metadata.savedAt);
+    return metadata;
+}
+
+function requireVersion(req, res, section) {
+    const metadata = setVersion(res, section);
+    if (!req.get('if-match')) {
+        res.status(428).json({ error: 'Reload this section before saving.', code: 'VERSION_REQUIRED' });
+        return false;
+    }
+    if (req.get('if-match').replace(/^"|"$/g, '') !== metadata.version) {
+        res.status(409).json({ error: 'This section changed in another session. Reload the latest version before saving your draft.', code: 'CONFLICT' });
+        return false;
+    }
+    return true;
+}
+
+function adminError(res, error, fallback) {
+    if (!error.status) console.error(fallback, error.message);
+    return res.status(error.status || 500).json({ error: error.status ? error.message : fallback, fields: error.fields });
+}
+
+app.use('/api/admin', (req, res, next) => {
+    if (req.method !== 'PUT') return next();
+    const match = req.path.match(/^\/(?:portfolio\/)?(profile|skills|interests|resume|contact|projects|settings|site|subscriptions)$/);
+    if (!match) return next();
+    if (!isAuthenticated(req)) return res.status(401).json({ error: 'Please log in again.' });
+    if (!requireVersion(req, res, match[1])) return;
+    next();
+});
 
 function requireCronAuth(req, res, next) {
     const expected = getCronSecret();
@@ -984,17 +1113,18 @@ app.post('/api/cron/subscription-reminders', requireCronAuth, async (req, res) =
         res.json({ success: true, ...result });
     } catch (err) {
         console.error('Subscription reminder cron error:', err.message);
-        res.status(500).json({ error: err.message || 'Error running subscription reminders.' });
+        adminError(res, err, 'Error running subscription reminders.');
     }
 });
 
 // Login
 app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
+    const { username, password } = req.body || {};
+    if (typeof username !== 'string' || typeof password !== 'string' || !username || !password || Buffer.byteLength(password) > 72) {
         return res.status(400).json({ error: 'Username and password are required.' });
     }
     if (username !== process.env.ADMIN_USERNAME) {
+        storage.record('Login failed');
         return res.status(401).json({ error: 'Invalid credentials.' });
     }
     try {
@@ -1005,10 +1135,16 @@ app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
 
         const match = await bcrypt.compare(password, passwordHash);
         if (!match) {
+            storage.record('Login failed');
             return res.status(401).json({ error: 'Invalid credentials.' });
         }
+        await new Promise((resolve, reject) => req.session.regenerate(error => error ? reject(error) : resolve()));
         req.session.isAdmin = true;
-        res.json({ success: true, message: 'Logged in successfully.' });
+        req.session.authVersion = authVersion();
+        req.session.csrfToken = crypto.randomBytes(32).toString('hex');
+        await new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
+        storage.record('Signed in');
+        res.json({ success: true, csrfToken: req.session.csrfToken, message: 'Logged in successfully.' });
     } catch (err) {
         console.error('Login error:', err);
         res.status(500).json({ error: 'Server error during login.' });
@@ -1017,25 +1153,32 @@ app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
 
 // Logout
 app.post('/api/admin/logout', (req, res) => {
-    req.session.destroy(() => {
+    req.session.destroy(error => {
+        if (error) return adminError(res, error, 'Unable to log out.');
+        res.clearCookie('portfolio.sid', { httpOnly: true, sameSite: 'lax', secure: isProduction });
         res.json({ success: true, message: 'Logged out.' });
     });
 });
 
 // Session check
 app.get('/api/admin/check', (req, res) => {
-    res.json({ authenticated: !!(req.session && req.session.isAdmin) });
+    res.json({ authenticated: isAuthenticated(req), csrfToken: req.session.csrfToken });
 });
 
 app.get('/api/admin/subscriptions', requireAuth, (req, res) => {
+    setVersion(res, 'subscriptions');
     const data = sanitizeSubscriptionsData(getSubscriptionsData());
     res.json(decorateSubscriptionsData(data));
 });
 
 app.put('/api/admin/subscriptions', requireAuth, (req, res) => {
     try {
-        const data = sanitizeSubscriptionsData(req.body || {});
-        saveSubscriptionsData(data);
+        if (reminderScanRunning) throw Object.assign(new Error('A reminder check is running. Try saving again shortly.'), { status: 409 });
+        const input = validateSubscriptions(req.body);
+        const data = sanitizeSubscriptionsData({ ...input, reminderHistory: getSubscriptionsData().reminderHistory });
+        storage.save('subscriptions', data);
+        setVersion(res, 'subscriptions');
+        storage.record('Saved subscriptions');
         res.json({
             success: true,
             message: 'Subscriptions updated successfully.',
@@ -1043,7 +1186,7 @@ app.put('/api/admin/subscriptions', requireAuth, (req, res) => {
         });
     } catch (err) {
         console.error('Error saving subscriptions:', err.message);
-        res.status(500).json({ error: 'Error saving subscriptions.' });
+        adminError(res, err, 'Error saving subscriptions.');
     }
 });
 
@@ -1053,7 +1196,7 @@ app.post('/api/admin/subscriptions/reminders/run', requireAuth, async (req, res)
         res.json({ success: true, ...result });
     } catch (err) {
         console.error('Manual subscription reminder error:', err.message);
-        res.status(500).json({ error: err.message || 'Error running subscription reminder check.' });
+        adminError(res, err, 'Error running subscription reminder check.');
     }
 });
 
@@ -1079,22 +1222,25 @@ app.post('/api/admin/subscriptions/test-email', requireAuth, async (req, res) =>
 });
 
 app.get('/api/admin/settings', requireAuth, (req, res) => {
+    setVersion(res, 'settings');
     res.json(getAdminSettingsResponse());
 });
 
 app.put('/api/admin/settings', requireAuth, (req, res) => {
     try {
+        const input = validate('settings', req.body);
         const currentSettings = getSettings();
-        const nextSettings = sanitizeSettings(req.body || {}, currentSettings);
-        saveSettings(nextSettings);
+        const nextSettings = sanitizeSettings(input, currentSettings);
+        storage.save('settings', nextSettings);
 
-        const password = cleanString(req.body?.email?.password, 1000);
+        const password = input.email.password;
         if (password) {
             const secrets = getSecrets();
             secrets.emailPassword = password;
             saveSecrets(secrets);
         }
-
+        setVersion(res, 'settings');
+        storage.record('Saved settings');
         res.json({
             success: true,
             message: 'Settings updated successfully.',
@@ -1102,18 +1248,21 @@ app.put('/api/admin/settings', requireAuth, (req, res) => {
         });
     } catch (err) {
         console.error('Error saving settings:', err.message);
-        res.status(500).json({ error: 'Error saving settings.' });
+        adminError(res, err, 'Error saving settings.');
     }
 });
 
 app.get('/api/admin/site', requireAuth, (req, res) => {
+    setVersion(res, 'site');
     res.json(getSite());
 });
 
 app.put('/api/admin/site', requireAuth, (req, res) => {
     try {
-        const site = sanitizeSite(req.body || {});
-        saveSite(site);
+        const site = sanitizeSite(validateSite(req.body));
+        storage.save('site', site);
+        setVersion(res, 'site');
+        storage.record('Saved site configuration');
         res.json({
             success: true,
             message: 'Public site configuration updated successfully.',
@@ -1121,11 +1270,11 @@ app.put('/api/admin/site', requireAuth, (req, res) => {
         });
     } catch (err) {
         console.error('Error saving site configuration:', err.message);
-        res.status(500).json({ error: 'Error saving site configuration.' });
+        adminError(res, err, 'Error saving site configuration.');
     }
 });
 
-app.post('/api/admin/password', requireAuth, async (req, res) => {
+app.post('/api/admin/password', requireAuth, adminLoginLimiter, async (req, res) => {
     const { currentPassword, newPassword } = req.body || {};
     if (!currentPassword || !newPassword) {
         return res.status(400).json({ error: 'Current password and new password are required.' });
@@ -1133,8 +1282,8 @@ app.post('/api/admin/password', requireAuth, async (req, res) => {
     if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
         return res.status(400).json({ error: 'Password fields must be strings.' });
     }
-    if (newPassword.length < 12) {
-        return res.status(400).json({ error: 'New password must be at least 12 characters.' });
+    if (newPassword.length < 12 || Buffer.byteLength(newPassword) > 72 || Buffer.byteLength(currentPassword) > 72) {
+        return res.status(400).json({ error: 'New password must contain at least 12 characters and at most 72 bytes.' });
     }
 
     try {
@@ -1145,13 +1294,19 @@ app.post('/api/admin/password', requireAuth, async (req, res) => {
 
         const match = await bcrypt.compare(currentPassword, passwordHash);
         if (!match) {
-            return res.status(401).json({ error: 'Current password is incorrect.' });
+            return res.status(400).json({ error: 'Current password is incorrect.' });
         }
 
         const secrets = getSecrets();
         secrets.adminPasswordHash = await bcrypt.hash(newPassword, 12);
         saveSecrets(secrets);
-        res.json({ success: true, message: 'Admin password updated successfully.' });
+        await new Promise((resolve, reject) => req.session.regenerate(error => error ? reject(error) : resolve()));
+        req.session.isAdmin = true;
+        req.session.authVersion = authVersion();
+        req.session.csrfToken = crypto.randomBytes(32).toString('hex');
+        await new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
+        storage.record('Password changed', 'Other sessions revoked');
+        res.json({ success: true, csrfToken: req.session.csrfToken, message: 'Admin password updated successfully.' });
     } catch (err) {
         console.error('Password reset error:', err.message);
         res.status(500).json({ error: 'Error updating password.' });
@@ -1161,7 +1316,7 @@ app.post('/api/admin/password', requireAuth, async (req, res) => {
 app.post('/api/admin/uploads/:type', requireAuth, express.raw({
     type: Object.keys(IMAGE_MIME_TYPES),
     limit: '8mb',
-}), (req, res) => {
+}), async (req, res) => {
     const group = req.params.type;
     const contentType = (req.get('content-type') || '').split(';')[0].toLowerCase();
     const extension = IMAGE_MIME_TYPES[contentType];
@@ -1182,36 +1337,240 @@ app.post('/api/admin/uploads/:type', requireAuth, express.raw({
     try {
         const uploadDir = path.join(UPLOADS_DIR, group);
         fs.mkdirSync(uploadDir, { recursive: true });
-        const fileName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${extension}`;
+        const pipeline = sharp(req.body, { limitInputPixels: 40000000, animated: true, failOn: 'warning' });
+        const metadata = await pipeline.metadata();
+        if ((metadata.pages || 1) * metadata.width * (metadata.pageHeight || metadata.height) > 40000000) throw new Error('Image is too large to process.');
+        const { data: encoded, info } = await pipeline.rotate().resize({
+            width: group === 'background' ? 2560 : 1600, height: group === 'background' ? 2560 : 1600,
+            fit: 'inside', withoutEnlargement: true,
+        }).webp({ quality: 82 }).toBuffer({ resolveWithObject: true });
+        const fileName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}.webp`;
         const fullPath = path.join(uploadDir, fileName);
-        fs.writeFileSync(fullPath, req.body);
+        fs.writeFileSync(fullPath, encoded, { flag: 'wx' });
 
         const publicPath = `assets/uploads/${group}/${fileName}`;
-        res.json({ success: true, path: publicPath });
+        storage.record('Uploaded image', publicPath);
+        res.json({ success: true, path: publicPath, width: info.width, height: info.height, bytes: encoded.length });
     } catch (err) {
         console.error('Image upload error:', err.message);
-        res.status(500).json({ error: 'Error saving uploaded image.' });
+        res.status(400).json({ error: 'The image could not be processed. Use a valid image under 8 MB and 40 megapixels.' });
     }
 });
 
 // Update portfolio section (protected)
+app.get('/api/admin/portfolio/:section', requireAuth, (req, res) => {
+    try {
+        const section = req.params.section;
+        if (!PORTFOLIO_SECTIONS.includes(section)) return res.status(404).json({ error: 'Section not found.' });
+        setVersion(res, section);
+        res.json(JSON.parse(fs.readFileSync(storage.fileFor(section), 'utf8')));
+    } catch (error) { adminError(res, error, 'Error loading this section.'); }
+});
+
 app.put('/api/admin/portfolio/:section', requireAuth, (req, res) => {
     const section = req.params.section;
     if (!PORTFOLIO_SECTIONS.includes(section)) {
         return res.status(404).json({ error: 'Section not found.' });
     }
-    const filePath = path.join(DATA_DIR, `${section}.json`);
     try {
-        writeJsonAtomic(filePath, req.body);
-        res.json({ success: true, message: `${section} updated successfully.` });
+        const data = validate(section, req.body);
+        storage.save(section, data);
+        setVersion(res, section);
+        storage.record('Saved content', section);
+        res.json({ success: true, data, message: `${section} updated successfully.` });
     } catch (err) {
         console.error(`Error writing ${section}.json:`, err.message);
-        res.status(500).json({ error: 'Error saving data.' });
+        adminError(res, err, 'Error saving data.');
     }
 });
 /*======= END ADMIN PANEL =======*/
 
-app.listen(PORT, () => {
+function imageReferences() {
+    const references = new Map();
+    function visit(value, owner) {
+        if (typeof value === 'string') {
+            let imagePath = value.replace(/^\//, '');
+            try {
+                if (/^https?:/.test(value)) {
+                    new URL(value);
+                    references.set(value, [...new Set([...(references.get(value) || []), owner])]);
+                    return;
+                }
+            } catch { return; }
+            if (imagePath.startsWith('assets/')) references.set(imagePath, [...new Set([...(references.get(imagePath) || []), owner])]);
+        } else if (Array.isArray(value)) value.forEach(item => visit(item, owner));
+        else if (isPlainObject(value)) Object.values(value).forEach(item => visit(item, owner));
+    }
+    for (const section of CONTENT_SECTIONS) {
+        const file = storage.fileFor(section);
+        if (fs.existsSync(file)) visit(JSON.parse(fs.readFileSync(file, 'utf8')), section);
+    }
+    for (const revision of storage.revisions()) visit(storage.readRevision(revision.id).data, 'revision history');
+    return references;
+}
+
+function mediaFiles() {
+    const references = imageReferences();
+    const files = [];
+    for (const group of UPLOAD_GROUPS) {
+        const dir = path.join(UPLOADS_DIR, group);
+        if (!fs.existsSync(dir) || fs.lstatSync(dir).isSymbolicLink()) continue;
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (!entry.isFile() || !/^[\w.-]+\.(jpg|jpeg|png|webp|gif)$/i.test(entry.name)) continue;
+            const publicPath = `assets/uploads/${group}/${entry.name}`;
+            const stat = fs.statSync(path.join(dir, entry.name));
+            const usedBy = new Set(references.get(publicPath) || []);
+            for (const [url, owners] of references) {
+                if (/^https?:/.test(url) && new URL(url).pathname === `/${publicPath}`) owners.forEach(owner => usedBy.add(owner));
+            }
+            files.push({ name: entry.name, group, path: publicPath, bytes: stat.size, createdAt: stat.mtime.toISOString(), usedBy: [...usedBy] });
+        }
+    }
+    return files.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+app.get('/api/admin/media', requireAuth, (req, res) => res.json({ files: mediaFiles() }));
+
+app.delete('/api/admin/media/:group/:name', requireAuth, (req, res) => {
+    const imagePath = `assets/uploads/${req.params.group}/${req.params.name}`;
+    const item = mediaFiles().find(file => file.path === imagePath);
+    if (!item) return res.status(404).json({ error: 'Image not found.' });
+    if (item.usedBy.length) return res.status(409).json({ error: 'This image is used by saved content or recovery history.' });
+    fs.unlinkSync(path.join(UPLOADS_DIR, item.group, item.name));
+    storage.record('Deleted unused image', item.path);
+    res.json({ success: true });
+});
+
+app.get('/api/admin/revisions', requireAuth, (req, res) => res.json({ revisions: storage.revisions() }));
+app.get('/api/admin/revisions/:id', requireAuth, (req, res) => {
+    try { res.json(storage.readRevision(req.params.id)); } catch (error) { adminError(res, error, 'Unable to load revision.'); }
+});
+app.post('/api/admin/revisions/:id/restore', requireAuth, (req, res) => {
+    try {
+        const revision = storage.readRevision(req.params.id);
+        if (!requireVersion(req, res, revision.section)) return;
+        if (revision.section === 'subscriptions' && reminderScanRunning) return res.status(409).json({ error: 'A reminder check is running. Try again shortly.' });
+        let data;
+        if (revision.section === 'site') data = sanitizeSite(validateSite(revision.data));
+        else if (revision.section === 'subscriptions') data = sanitizeSubscriptionsData({ ...validateSubscriptions(revision.data), reminderHistory: getSubscriptionsData().reminderHistory });
+        else data = validate(revision.section, revision.data);
+        storage.save(revision.section, data, 'Before restore');
+        storage.record('Restored revision', revision.section);
+        setVersion(res, revision.section);
+        res.json({ success: true, section: revision.section });
+    } catch (error) { adminError(res, error, 'Unable to restore revision.'); }
+});
+
+app.post('/api/admin/backups', requireAuth, (req, res) => {
+    const ids = CONTENT_SECTIONS.map(section => storage.snapshot(section, 'Manual snapshot')).filter(Boolean);
+    storage.record('Created recovery snapshot', `${ids.length} sections`);
+    res.json({ success: true, count: ids.length });
+});
+
+app.get('/api/admin/backup/export', requireAuth, (req, res) => {
+    const data = {};
+    for (const section of CONTENT_SECTIONS) {
+        if (fs.existsSync(storage.fileFor(section))) data[`${section}.json`] = JSON.parse(fs.readFileSync(storage.fileFor(section), 'utf8'));
+    }
+    const files = mediaFiles();
+    if (files.reduce((total, item) => total + item.bytes, 0) > 100 * 1024 * 1024) return res.status(413).json({ error: 'Media exceeds 100 MB. Back up the data and uploads directories on your server.' });
+    const uploads = files.map(item => ({ path: item.path, base64: fs.readFileSync(path.join(UPLOADS_DIR, item.group, item.name)).toString('base64') }));
+    res.attachment(`portfolio-backup-${new Date().toISOString().slice(0, 10)}.json`).json({ format: 'portfolio-backup', version: 1, createdAt: new Date().toISOString(), data, uploads });
+});
+
+app.post('/api/admin/settings/verify-email', requireAuth, async (req, res) => {
+    const config = getEmailConfig();
+    const version = resourceVersion('settings').version;
+    if (!config.user || !config.pass) return res.status(400).json({ error: 'Save your SMTP credentials first.' });
+    const transporter = nodemailer.createTransport({ host: config.host, port: config.port, secure: config.secure, auth: { user: config.user, pass: config.pass }, connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 10000 });
+    try {
+        await transporter.verify();
+        writeAtomic(path.join(DATA_DIR, 'smtp-check.json'), { checkedAt: new Date().toISOString(), version, success: true });
+        storage.record('Verified SMTP connection');
+        res.json({ success: true, message: 'SMTP connection and authentication verified.' });
+    } catch (error) {
+        writeAtomic(path.join(DATA_DIR, 'smtp-check.json'), { checkedAt: new Date().toISOString(), success: false });
+        adminError(res, error, 'SMTP verification failed. Check your saved host, port, username, and password.');
+    } finally { transporter.close(); }
+});
+
+app.get('/api/admin/dashboard', requireAuth, (req, res) => {
+    const issues = [];
+    const counts = {};
+    const sections = {};
+    for (const section of CONTENT_SECTIONS) {
+        sections[section] = resourceVersion(section);
+        try {
+            const value = JSON.parse(fs.readFileSync(storage.fileFor(section), 'utf8'));
+            if (Array.isArray(value)) counts[section] = value.length;
+            if (section === 'resume') counts.resume = ['experience', 'education', 'certifications', 'honors', 'research'].reduce((count, key) => count + (value[key]?.length || 0), 0);
+            if (section === 'projects') value.filter(project => !project.image).forEach(project => issues.push({ section, message: `${project.title}: missing project image` }));
+            if (section === 'profile' && !value.meta?.description) issues.push({ section, message: 'Add a search description for your portfolio.' });
+        } catch { issues.push({ section, message: `${section}: content file is missing or invalid.` }); }
+    }
+    const email = getEmailConfig();
+    const emailReady = !!(email.host && email.user && email.pass && email.to);
+    const smtpCheck = readJsonFile(path.join(DATA_DIR, 'smtp-check.json'), {});
+    const subscriptions = decorateSubscriptionsData(sanitizeSubscriptionsData(getSubscriptionsData()));
+    if (!emailReady) issues.push({ section: 'settings', message: 'SMTP configuration is incomplete.' });
+    if (subscriptions.summary.expired) issues.push({ section: 'subscriptions', message: `${subscriptions.summary.expired} subscription(s) past renewal.` });
+    const images = imageReferences();
+    for (const [imagePath, owners] of images) {
+        if (!imagePath.startsWith('assets/')) continue;
+        if (owners.every(owner => owner === 'revision history')) continue;
+        const file = imagePath.startsWith('assets/uploads/') ? path.join(UPLOADS_DIR, imagePath.slice('assets/uploads/'.length)) : path.join(PUBLIC_DIR, imagePath);
+        if (!fs.existsSync(file)) issues.push({ section: owners[0], message: `Missing image: ${imagePath}` });
+    }
+    const links = readJsonFile(path.join(DATA_DIR, 'link-check.json'), { results: [] });
+    for (const result of links.results.filter(item => (item.status === 404 || item.status === 410) && links.versions?.[item.section] === sections[item.section]?.version)) {
+        issues.push({ section: result.section, message: `${result.label}: link returned ${result.status}` });
+    }
+    res.json({ counts, sections, issues, subscriptions: subscriptions.summary,
+        upcoming: subscriptions.subscriptions.filter(item => item.status === 'active').sort((a, b) => a.renewalDate.localeCompare(b.renewalDate)).slice(0, 6),
+        email: { configured: emailReady, verified: Boolean(smtpCheck.success && smtpCheck.version === sections.settings.version), checkedAt: smtpCheck.checkedAt || null },
+        automation: { ...readJsonFile(AUTOMATION_FILE, {}), configured: !!getCronSecret() },
+        latestRevision: storage.revisions()[0] || null, activity: storage.activity().slice(0, 30), links,
+    });
+});
+
+app.post('/api/admin/links/check', requireAuth, rateLimit({ windowMs: 60000, limit: 2, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
+    const links = new Map();
+    const versions = {};
+    function add(url, section, label) {
+        const safe = safeUrl(url);
+        if (safe && links.size < 24) links.set(safe, { url: safe, section, label });
+    }
+    for (const section of ['profile', 'contact', 'projects', 'resume']) {
+        versions[section] = resourceVersion(section).version;
+        const data = JSON.parse(fs.readFileSync(storage.fileFor(section), 'utf8'));
+        for (const item of data.socialLinks || []) add(item.url, section, item.platform);
+        if (section === 'projects') for (const item of data) { add(item.liveUrl, section, `${item.title} website`); add(item.repoUrl, section, `${item.title} source`); }
+        for (const item of data.research || []) add(item.publicationUrl, section, item.publicationTitle || item.title);
+    }
+    const pending = [...links.values()];
+    const results = [];
+    for (let offset = 0; offset < pending.length; offset += 8) {
+        results.push(...await Promise.all(pending.slice(offset, offset + 8).map(async item => {
+            try { const response = await publicFetch(item.url, { method: 'HEAD' }); return { ...item, status: response.status }; }
+            catch { return { ...item, status: null }; }
+        })));
+    }
+    const report = { checkedAt: new Date().toISOString(), results, versions };
+    writeAtomic(path.join(DATA_DIR, 'link-check.json'), report);
+    storage.record('Checked public links', `${results.length} links checked`);
+    res.json(report);
+});
+
+app.use((error, req, res, next) => {
+    if (res.headersSent) return next(error);
+    if (error.type === 'entity.too.large') return res.status(413).json({ error: 'The request is too large. Images must be under 8 MB.' });
+    if (error instanceof SyntaxError && error.type === 'entity.parse.failed') return res.status(400).json({ error: 'The request contains invalid JSON.' });
+    adminError(res, error, 'The request could not be completed.');
+});
+
+if (require.main === module) app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
+
+module.exports = { app, sessionStore, getDueSubscriptionReminders, runSubscriptionReminderScan };
 

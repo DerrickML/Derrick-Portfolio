@@ -27,6 +27,7 @@
 
   <!-- Template Main CSS File -->
   <link href="assets/css/style.css" rel="stylesheet">
+  <link href="assets/css/motion.css" rel="stylesheet">
 
   <!-- =======================================================
   * Template Name: Personal
@@ -46,15 +47,15 @@
       <h1><a href="index.html" id="header-name">Loading...</a></h1>
       <h2 id="header-tagline"></h2>
 
-      <nav id="navbar" class="navbar">
-        <ul>
+      <nav id="navbar" class="navbar" aria-label="Main navigation">
+        <ul id="navigation-links">
           <li><a class="nav-link active" href="#header">Home</a></li>
           <li><a class="nav-link" href="#about">About</a></li>
           <li><a class="nav-link" href="#resume">Resume</a></li>
           <li><a class="nav-link" href="#projects">Projects</a></li>
           <li><a class="nav-link" href="#contact">Contact</a></li>
         </ul>
-        <button type="button" class="bi bi-list mobile-nav-toggle" aria-label="Open navigation" aria-expanded="false"></button>
+        <button type="button" class="bi bi-list mobile-nav-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="navigation-links"></button>
       </nav><!-- .navbar -->
 
       <div class="social-links" id="header-social-links">
@@ -126,7 +127,7 @@
     </div><!-- End Interests -->
 
     <!-- ======= Testimonials ======= -->
-    <div class="testimonials container">
+    <div class="testimonials container" hidden>
 
       <div class="section-title">
         <h2>Testimonials</h2>
@@ -276,11 +277,11 @@
           <div class="row">
             <div class="col-md-6 form-group">
               <label for="name" class="visually-hidden">Your Name</label>
-              <input type="text" name="name" class="form-control" id="name" placeholder="Your Name" required>
+              <input type="text" name="name" class="form-control" id="name" placeholder="Your Name" autocomplete="name" required>
             </div>
             <div class="col-md-6 form-group mt-3 mt-md-0">
               <label for="email" class="visually-hidden">Your Email</label>
-              <input type="email" class="form-control" name="email" id="email" placeholder="Your Email"
+              <input type="email" class="form-control" name="email" id="email" placeholder="Your Email" autocomplete="email"
                 required>
             </div>
           </div>
@@ -300,15 +301,16 @@
             <div class="sent-message">Your message has been sent. Thank you!</div>
           </div>
           <div class="text-center"><button id="submitButton" type="submit">Send Message</button></div>
-          <p id="mailMessage" class="text-center"></p>
+          <p id="mailMessage" class="text-center" role="status" aria-live="polite" aria-atomic="true"></p>
         </form>
 
       </div>
+    </div>
   </section><!-- End Contact Section -->
 
   <!-- Captcha Modal -->
   <div class="modal fade" id="captchaModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1"
-    aria-labelledby="staticBackdropLabel" aria-hidden="true" data-bs-theme="dark">
+    aria-labelledby="captchaModalLabel" aria-hidden="true" data-bs-theme="dark">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -319,7 +321,7 @@
           <p class="p-3 text-primary-ephasis" id="captchaIntro">Please answer the following question to submit the form:</p>
           <label for="captchaAnswer" class="form-label" id="captchaQuestion">What is 1 + 1?</label>
           <input type="number" id="captchaAnswer" class="form-control">
-          <p id="captchaMessage" class="text-center"></p>
+          <p id="captchaMessage" class="text-center" role="alert" aria-atomic="true"></p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="captchaClose">Close</button>
@@ -335,7 +337,9 @@
   <script src="assets/vendor/waypoints/noframework.waypoints.js"></script>
 
   <!-- JS Files -->
+  <script src="assets/js/public-data.js"></script>
   <script src="assets/js/main.js"></script>
+  <script src="assets/js/motion.js"></script>
   <script src="assets/js/data-loader.js"></script>
   <script src="assets/js/contact-form.js"></script>
 

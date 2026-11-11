@@ -16,7 +16,7 @@
     if (all) {
       return [...document.querySelectorAll(el)]
     } else {
-      return document.querySelector(el)
+      try { return document.querySelector(el) } catch { return null }
     }
   }
 
@@ -41,21 +41,46 @@
   const scrollto = (el) => {
     window.scrollTo({
       top: 0,
-      behavior: 'smooth'
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
     })
   }
 
   /**
    * Mobile nav toggle
    */
-  on('click', '.mobile-nav-toggle', function(e) {
-    select('#navbar').classList.toggle('navbar-mobile')
-    this.classList.toggle('bi-list')
-    this.classList.toggle('bi-x')
-    const isOpen = select('#navbar').classList.contains('navbar-mobile')
-    this.setAttribute('aria-expanded', String(isOpen))
-    this.setAttribute('aria-label', isOpen ? 'Close navigation' : 'Open navigation')
-  })
+  const navbarToggle = select('.mobile-nav-toggle');
+  const navbar = select('#navbar');
+  const setMobileMenu = isOpen => {
+    navbar.classList.toggle('navbar-mobile', isOpen);
+    navbarToggle.classList.toggle('bi-list', !isOpen);
+    navbarToggle.classList.toggle('bi-x', isOpen);
+    navbarToggle.setAttribute('aria-expanded', String(isOpen));
+    navbarToggle.setAttribute('aria-label', isOpen ? 'Close navigation' : 'Open navigation');
+  };
+  on('click', '.mobile-nav-toggle', function() {
+    setMobileMenu(!navbar.classList.contains('navbar-mobile'));
+  });
+  document.addEventListener('keydown', event => {
+    if (!navbar.classList.contains('navbar-mobile')) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setMobileMenu(false);
+      navbarToggle.focus();
+    } else if (event.key === 'Tab') {
+      const targets = [...navbar.querySelectorAll('a[href], button')].filter(item => item.getClientRects().length);
+      const index = targets.indexOf(document.activeElement);
+      if (event.shiftKey && index <= 0) {
+        event.preventDefault();
+        targets[targets.length - 1].focus();
+      } else if (!event.shiftKey && (index < 0 || index === targets.length - 1)) {
+        event.preventDefault();
+        targets[0].focus();
+      }
+    }
+  });
+  window.matchMedia('(min-width: 992px)').addEventListener('change', event => {
+    if (event.matches) setMobileMenu(false);
+  });
 
   /**
    * Scrool with ofset on links with a class name .scrollto
@@ -75,41 +100,46 @@
       })
 
       this.classList.add('active')
+      history.replaceState(null, '', this.hash)
+      sections.forEach(item => {
+        item.inert = item !== section;
+        item.setAttribute('aria-hidden', String(item !== section));
+      })
 
-      if (navbar.classList.contains('navbar-mobile')) {
-        navbar.classList.remove('navbar-mobile')
-        let navbarToggle = select('.mobile-nav-toggle')
-        navbarToggle.classList.toggle('bi-list')
-        navbarToggle.classList.toggle('bi-x')
-        navbarToggle.setAttribute('aria-expanded', 'false')
-        navbarToggle.setAttribute('aria-label', 'Open navigation')
-      }
+      const wasMobile = navbar.classList.contains('navbar-mobile');
+      setMobileMenu(false);
 
       if (this.hash == '#header') {
         header.classList.remove('header-top')
         sections.forEach((item) => {
           item.classList.remove('section-show')
         })
+        if (wasMobile) select('#header-name').focus({ preventScroll: true });
         return;
       }
 
-      if (!header.classList.contains('header-top')) {
-        header.classList.add('header-top')
-        setTimeout(function() {
-          sections.forEach((item) => {
-            item.classList.remove('section-show')
-          })
-          section.classList.add('section-show')
-
-        }, 350);
-      } else {
-        sections.forEach((item) => {
-          item.classList.remove('section-show')
-        })
-        section.classList.add('section-show')
-      }
+      header.classList.add('header-top')
+      sections.forEach(item => item.classList.toggle('section-show', item === section))
 
       scrollto(this.hash)
+      if (wasMobile || e.detail === 0) {
+        const heading = section.querySelector('.section-title h2');
+        if (heading) {
+          heading.tabIndex = -1;
+          const previousFocus = document.activeElement;
+          const focusHeading = () => {
+            const focusUnchanged = document.activeElement === previousFocus || document.activeElement === document.body;
+            if (section.classList.contains('section-show') && !section.inert && focusUnchanged) {
+              heading.focus({ preventScroll: true });
+            }
+          };
+          focusHeading();
+          // Visibility transitions can prevent focus until the section has appeared.
+          if (document.activeElement !== heading) {
+            section.addEventListener('transitionend', focusHeading, { once: true });
+          }
+        }
+      }
     }
   }, true)
 
@@ -117,7 +147,13 @@
    * Activate/show sections on load with hash links
    */
   window.addEventListener('load', () => {
-    if (window.location.hash) {
+    const validHash = ['#about', '#resume', '#projects', '#contact'].includes(window.location.hash);
+    select('section', true).forEach(section => {
+      const active = validHash && `#${section.id}` === window.location.hash;
+      section.inert = !active;
+      section.setAttribute('aria-hidden', String(!active));
+    });
+    if (validHash) {
       let initial_nav = select(window.location.hash)
 
       if (initial_nav) {
@@ -134,9 +170,7 @@
           }
         })
 
-        setTimeout(function() {
-          initial_nav.classList.add('section-show')
-        }, 350);
+        initial_nav.classList.add('section-show')
 
         scrollto(window.location.hash)
       }

@@ -19,7 +19,7 @@ A dynamic personal portfolio showcasing skills, experience, and projects. Built 
 
 | Layer | Technology |
 |-------|-----------|
-| **Server** | Node.js 18+, Express 5 |
+| **Server** | Node.js 20.9+, Express 5 |
 | **Auth** | express-session, bcryptjs |
 | **Security** | helmet (CSP), express-rate-limit |
 | **Email** | Nodemailer |
@@ -79,7 +79,7 @@ Derrick-Portfolio/
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v18+
+- [Node.js](https://nodejs.org/) v20.9+ (Sharp requires this minimum)
 
 ### Installation
 
@@ -93,6 +93,8 @@ npm run setup
 `data/` is gitignored by design. `npm run setup` creates the missing private runtime files and a `.env` file when needed without overwriting existing local data.
 
 Full setup documentation is in [docs/setup.md](docs/setup.md).
+
+Admin workflows, draft preview, media management, security, and backup/restore procedures are documented in [docs/admin.md](docs/admin.md). The admin now includes an Overview dashboard, grouped Settings, explicit publishing, recovery history, and mobile navigation. Supporting validation, storage, and outbound-network helpers live in `lib/`; integration tests live in `tests/`.
 
 ### Environment Variables
 
@@ -145,6 +147,7 @@ The server starts on **http://localhost:3003**.
 | `GET` | `/api/site` | Get public site navigation, labels, visibility, and testimonials config |
 | `GET` | `/api/testimonials` | Get testimonials from Google Sheets |
 | `POST` | `/send-email` | Submit contact form (rate-limited) |
+| `GET` | `/api/contact/challenge` | Create a short-lived, session-bound arithmetic challenge |
 
 ### Admin (session-protected)
 
@@ -153,6 +156,8 @@ The server starts on **http://localhost:3003**.
 | `POST` | `/api/admin/login` | Authenticate with username/password |
 | `POST` | `/api/admin/logout` | End session |
 | `GET` | `/api/admin/check` | Check auth status |
+| `GET` | `/api/admin/dashboard` | Read content issues, status, renewals, and activity |
+| `GET` | `/api/admin/portfolio/:section` | Read content and version headers for editing |
 | `PUT` | `/api/admin/portfolio/:section` | Update a portfolio section |
 | `GET` | `/api/admin/settings` | Read admin settings without exposing stored passwords |
 | `PUT` | `/api/admin/settings` | Save SMTP, image, and analytics settings |
@@ -164,6 +169,17 @@ The server starts on **http://localhost:3003**.
 | `PUT` | `/api/admin/subscriptions` | Save subscription tracker data |
 | `POST` | `/api/admin/subscriptions/reminders/run` | Manually run due reminder scan |
 | `POST` | `/api/admin/subscriptions/test-email` | Send a test reminder email |
+| `POST` | `/api/admin/settings/verify-email` | Verify saved SMTP connection without sending mail |
+| `GET` | `/api/admin/media` | List uploaded images and references |
+| `DELETE` | `/api/admin/media/:group/:name` | Delete an unused image |
+| `GET` | `/api/admin/revisions` | List recovery points |
+| `GET` | `/api/admin/revisions/:id` | Review one recovery point |
+| `POST` | `/api/admin/revisions/:id/restore` | Restore with a current `If-Match` version |
+| `POST` | `/api/admin/backups` | Snapshot all editable files |
+| `GET` | `/api/admin/backup/export` | Download content and uploaded media, excluding credentials |
+| `POST` | `/api/admin/links/check` | Check saved public links |
+
+Admin writes require `X-CSRF-Token`; PUT saves also require `If-Match`. See [the API and deployment notes](docs/admin.md#deployment-and-testing). Keep one Node process per data directory; JSON writes and reminder scheduling do not support cluster mode.
 
 ### Private Cron
 

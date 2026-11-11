@@ -19,27 +19,11 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   function sanitizeUrl(url) {
-    try {
-      const parsed = new URL(url, window.location.origin);
-      if (['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol)) {
-        return parsed.href;
-      }
-    } catch (err) {
-      return '';
-    }
-    return '';
+    return window.PortfolioData.safeUrl(url, ['http:', 'https:', 'mailto:', 'tel:']);
   }
 
   function sanitizeAssetUrl(url) {
-    try {
-      const parsed = new URL(url, window.location.origin);
-      if (['http:', 'https:'].includes(parsed.protocol)) {
-        return parsed.href;
-      }
-    } catch (err) {
-      return '';
-    }
-    return '';
+    return window.PortfolioData.safeUrl(url);
   }
 
   function setBackgroundImage(imagePath) {
@@ -52,6 +36,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   function loadAnalytics(measurementId) {
+    if (window.PortfolioData.preview) return;
     const id = (measurementId || '').trim();
     if (!id || !/^G-[A-Z0-9-]+$/i.test(id) || document.querySelector(`script[data-ga-id="${id}"]`)) {
       return;
@@ -89,7 +74,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   function applyNavigation(site) {
     const sections = site?.sections || {};
     (site?.navigation || []).forEach(item => {
-      const link = document.querySelector(`#navbar a[href="${item.href}"]`);
+      const link = [...document.querySelectorAll('#navbar a')].find(anchor => anchor.getAttribute('href') === item.href);
       if (!link) return;
       const targetId = (item.href || '').replace('#', '');
       const targetEnabled = targetId === 'header' || sections[targetId]?.enabled !== false;
@@ -168,7 +153,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     const captchaMap = {
       captchaModalLabel: contactForm.captchaTitle,
       captchaIntro: contactForm.captchaIntro,
-      captchaQuestion: contactForm.captchaQuestion,
       captchaClose: contactForm.captchaCloseLabel,
       checkCaptcha: contactForm.captchaSubmitLabel,
     };
@@ -225,9 +209,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   // Fetch JSON from our API
   async function fetchJson(url) {
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+      return await window.PortfolioData.fetchJson(url);
     } catch (err) {
       console.error(`Error loading ${url}:`, err);
       return null;
@@ -344,6 +326,7 @@ document.addEventListener('DOMContentLoaded', async function () {
       const barWrap = el('div', 'progress-bar-wrap');
       const bar = el('div', 'progress-bar');
       bar.setAttribute('role', 'progressbar');
+      bar.setAttribute('aria-label', skill.name);
       bar.setAttribute('aria-valuenow', skill.percentage);
       bar.setAttribute('aria-valuemin', '0');
       bar.setAttribute('aria-valuemax', '100');
@@ -598,6 +581,7 @@ document.addEventListener('DOMContentLoaded', async function () {
       tabButton.id = `resume-tab-${tab.id}`;
       tabButton.setAttribute('role', 'tab');
       tabButton.setAttribute('aria-selected', String(isActive));
+      tabButton.tabIndex = isActive ? 0 : -1;
       tabButton.setAttribute('aria-controls', `resume-panel-${tab.id}`);
       tabButton.textContent = tab.label;
       tabsWrap.appendChild(tabButton);
@@ -606,6 +590,7 @@ document.addEventListener('DOMContentLoaded', async function () {
       panel.id = `resume-panel-${tab.id}`;
       panel.setAttribute('role', 'tabpanel');
       panel.setAttribute('aria-labelledby', tabButton.id);
+      panel.tabIndex = 0;
       if (!isActive) panel.hidden = true;
 
       const panelHeader = el('div', 'resume-panel-header');
@@ -625,6 +610,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         tabsWrap.querySelectorAll('.resume-tab').forEach(button => {
           button.classList.remove('active');
           button.setAttribute('aria-selected', 'false');
+          button.tabIndex = -1;
         });
         panelsWrap.querySelectorAll('.resume-panel').forEach(item => {
           item.classList.remove('active');
@@ -632,8 +618,21 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
         tabButton.classList.add('active');
         tabButton.setAttribute('aria-selected', 'true');
+        tabButton.tabIndex = 0;
         panel.classList.add('active');
         panel.hidden = false;
+      });
+      tabButton.addEventListener('keydown', event => {
+        const buttons = [...tabsWrap.querySelectorAll('.resume-tab')];
+        let nextIndex;
+        if (event.key === 'ArrowRight') nextIndex = (index + 1) % buttons.length;
+        else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + buttons.length) % buttons.length;
+        else if (event.key === 'Home') nextIndex = 0;
+        else if (event.key === 'End') nextIndex = buttons.length - 1;
+        else return;
+        event.preventDefault();
+        buttons[nextIndex].click();
+        buttons[nextIndex].focus();
       });
     });
   }
@@ -699,22 +698,25 @@ document.addEventListener('DOMContentLoaded', async function () {
   // ──────────────────────────────────────────────
   // FETCH ALL DATA & RENDER
   // ──────────────────────────────────────────────
-  const [settings, site, profile, skills, interests, resume, contact] = await Promise.all([
-    fetchJson('/api/settings/public'),
-    fetchJson('/api/site'),
-    fetchSection('profile'),
-    fetchSection('skills'),
-    fetchSection('interests'),
-    fetchSection('resume'),
-    fetchSection('contact'),
+  // Render each section when it arrives; secondary requests must not delay the introduction.
+  let publicSettings = null;
+  let profileRendered = false;
+  await Promise.all([
+    fetchJson('/api/settings/public').then(settings => {
+      publicSettings = settings;
+      if (settings?.images?.backgroundImage) setBackgroundImage(settings.images.backgroundImage);
+      if (settings?.analytics?.googleMeasurementId) loadAnalytics(settings.analytics.googleMeasurementId);
+      const image = document.getElementById('profile-image');
+      if (profileRendered && image && settings?.images?.profileImage) image.src = settings.images.profileImage;
+    }),
+    fetchJson('/api/site').then(applyPublicSite),
+    fetchSection('profile').then(profile => {
+      renderProfile(profile, publicSettings);
+      profileRendered = Boolean(profile);
+    }),
+    fetchSection('skills').then(renderSkills),
+    fetchSection('interests').then(renderInterests),
+    fetchSection('resume').then(renderResume),
+    fetchSection('contact').then(renderContact),
   ]);
-
-  if (settings?.images?.backgroundImage) setBackgroundImage(settings.images.backgroundImage);
-  if (settings?.analytics?.googleMeasurementId) loadAnalytics(settings.analytics.googleMeasurementId);
-  applyPublicSite(site);
-  renderProfile(profile, settings);
-  renderSkills(skills);
-  renderInterests(interests);
-  renderResume(resume);
-  renderContact(contact);
 });

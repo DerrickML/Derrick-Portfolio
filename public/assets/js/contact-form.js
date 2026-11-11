@@ -6,20 +6,30 @@ document.addEventListener('DOMContentLoaded', function () {
   const captchaAnswer = document.getElementById('captchaAnswer');
   const checkCaptcha = document.getElementById('checkCaptcha');
   let isSending = false;
+  let isLoadingChallenge = false;
+  const messageTimers = new Map();
 
-  form.addEventListener('submit', function (e) {
+  form.addEventListener('submit', async function (e) {
     e.preventDefault();
-    if (isSending) return;
+    if (isSending || isLoadingChallenge) return;
+    if (window.PortfolioData.preview) return showMessage('Messages cannot be sent from a draft preview.', 'text-danger', 'mailMessage');
     showMessage('', '', 'mailMessage');
     showMessage('', '', 'captchaMessage');
     captchaAnswer.value = '';
-    captchaModal.show();
+    isLoadingChallenge = true;
+    submitButton.disabled = true;
+    try {
+      const challenge = await window.PortfolioData.fetchJson('/api/contact/challenge');
+      document.getElementById('captchaQuestion').textContent = challenge.question;
+      captchaModal.show();
+    } catch { showMessage('Unable to load the security check. Please try again.', 'text-danger', 'mailMessage'); }
+    finally { isLoadingChallenge = false; submitButton.disabled = false; }
   });
 
   checkCaptcha.addEventListener('click', function () {
     if (isSending) return;
 
-    if (Number(captchaAnswer.value) === 2) {
+    if (captchaAnswer.value.trim()) {
       sendFormData();
       captchaModal.hide();
     } else {
@@ -33,17 +43,28 @@ document.addEventListener('DOMContentLoaded', function () {
     captchaAnswer.focus();
   });
 
+  captchaAnswer.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      checkCaptcha.click();
+    }
+  });
+
+  document.getElementById('captchaModal').addEventListener('hidden.bs.modal', function () {
+    if (!submitButton.disabled) submitButton.focus();
+  });
+
   async function sendFormData() {
     const formData = {
       name: document.getElementById('name').value,
       email: document.getElementById('email').value,
       subject: document.getElementById('subject').value,
-      message: document.getElementById('message').value
+      message: document.getElementById('message').value,
+      answer: captchaAnswer.value.trim(),
     };
 
     isSending = true;
-    submitButton.innerHTML =
-      `<span class="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span> ${submitButton.dataset.sendingLabel || 'Sending...'}`;
+    submitButton.textContent = submitButton.dataset.sendingLabel || 'Sending...';
     submitButton.disabled = true;
     checkCaptcha.disabled = true;
 
@@ -77,10 +98,15 @@ document.addEventListener('DOMContentLoaded', function () {
   //Function to display the error message
   function showMessage(message, className, elementID) {
     const messageElement = document.getElementById(elementID);
+    clearTimeout(messageTimers.get(elementID));
+    messageTimers.delete(elementID);
     messageElement.textContent = message;
     messageElement.className = className || 'text-center';
     if (message) {
-      setTimeout(() => messageElement.textContent = '', 10000);
+      messageTimers.set(elementID, setTimeout(() => {
+        messageElement.textContent = '';
+        messageTimers.delete(elementID);
+      }, 10000));
     }
   }
 });

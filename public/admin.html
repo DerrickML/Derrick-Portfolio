@@ -7,247 +7,7 @@
   <link href="assets/img/favicon.png" rel="icon">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-  <style>
-    :root {
-      --bg-dark: #0b0e14;
-      --bg-card: #141822;
-      --bg-input: #1a1f2e;
-      --accent: #10b981;
-      --accent-hover: #059669;
-      --text: #e2e8f0;
-      --text-muted: #64748b;
-      --border: #1e293b;
-      --danger: #ef4444;
-      --warning: #f59e0b;
-    }
-    * { box-sizing: border-box; }
-    body {
-      background: var(--bg-dark);
-      color: var(--text);
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      margin: 0; min-height: 100vh;
-    }
-    /* LOGIN */
-    .login-wrapper {
-      display: flex; justify-content: center; align-items: center;
-      min-height: 100vh; padding: 1rem;
-    }
-    .login-card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 16px; padding: 2.5rem; width: 100%; max-width: 400px;
-      box-shadow: 0 20px 50px rgba(0,0,0,.4);
-    }
-    .login-card h1 { font-size: 1.5rem; margin-bottom: .5rem; }
-    .login-card .subtitle { color: var(--text-muted); font-size: .875rem; margin-bottom: 2rem; }
-    /* DASHBOARD */
-    .dashboard { display: none; }
-    .sidebar {
-      position: fixed; left: 0; top: 0; bottom: 0; width: 240px;
-      background: var(--bg-card); border-right: 1px solid var(--border);
-      padding: 1.5rem 0; overflow-y: auto; z-index: 10;
-    }
-    .sidebar .brand {
-      padding: 0 1.25rem 1.5rem; border-bottom: 1px solid var(--border);
-      margin-bottom: 1rem;
-    }
-    .sidebar .brand h2 { font-size: 1.1rem; margin: 0; }
-    .sidebar .brand small { color: var(--text-muted); font-size: .75rem; }
-    .sidebar-nav { list-style: none; padding: 0; margin: 0; }
-    .sidebar-nav li a {
-      display: flex; align-items: center; gap: .75rem;
-      padding: .75rem 1.25rem; color: var(--text-muted);
-      text-decoration: none; font-size: .9rem; transition: all .2s;
-      border-left: 3px solid transparent;
-    }
-    .sidebar-nav li a:hover, .sidebar-nav li a.active {
-      color: var(--accent); background: rgba(16,185,129,.06);
-      border-left-color: var(--accent);
-    }
-    .sidebar-nav li a i { font-size: 1.1rem; width: 20px; text-align: center; }
-    .main-content { margin-left: 240px; padding: 0; }
-    .topbar {
-      position: sticky; top: 0; z-index: 5;
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 1rem 2rem;
-      background: var(--bg-dark);
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 2rem;
-    }
-    .topbar h1 { font-size: 1.5rem; margin: 0; }
-    .section-panels-wrap { padding: 0 2rem 2rem; max-width: 960px; }
-    /* EDITOR CARDS */
-    .editor-card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem;
-    }
-    .editor-card h3 {
-      font-size: 1rem; color: var(--accent); margin-bottom: 1rem;
-      padding-bottom: .5rem; border-bottom: 1px solid var(--border);
-    }
-    /* FORM STYLES */
-    .form-control, .form-select {
-      background: var(--bg-input) !important; border: 1px solid var(--border) !important;
-      color: var(--text) !important; font-size: .875rem;
-    }
-    .form-control:focus, .form-select:focus {
-      border-color: var(--accent) !important;
-      box-shadow: 0 0 0 2px rgba(16,185,129,.15) !important;
-    }
-    .form-control::placeholder { color: var(--text-muted) !important; }
-    .form-label { font-size: .8rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: .5px; }
-    .form-text { color: var(--text-muted) !important; font-size: .76rem; }
-    textarea.form-control { min-height: 80px; }
-    /* BUTTONS */
-    .btn-accent {
-      background: var(--accent); border: none; color: #fff;
-      font-weight: 600; padding: .6rem 1.5rem; border-radius: 8px;
-      transition: all .2s;
-    }
-    .btn-accent:hover { background: var(--accent-hover); color: #fff; }
-    .btn-outline-accent {
-      border: 1px solid var(--accent); color: var(--accent);
-      background: transparent; border-radius: 8px; padding: .4rem .75rem;
-      font-size: .8rem; transition: all .2s;
-    }
-    .btn-outline-accent:hover { background: var(--accent); color: #fff; }
-    .btn-outline-danger {
-      border: 1px solid var(--danger); color: var(--danger);
-      background: transparent; border-radius: 6px; padding: .25rem .5rem;
-      font-size: .75rem;
-    }
-    .btn-outline-danger:hover { background: var(--danger); color: #fff; }
-    /* DYNAMIC ITEMS */
-    .dynamic-item {
-      background: var(--bg-input); border: 1px solid var(--border);
-      border-radius: 8px; padding: 1rem; margin-bottom: .75rem;
-      position: relative; transition: box-shadow .2s;
-    }
-    .dynamic-item .remove-btn {
-      position: absolute; top: .5rem; right: .5rem;
-    }
-    /* DRAG HANDLE */
-    .drag-handle {
-      position: absolute; top: .5rem; left: .5rem;
-      cursor: grab; color: var(--text-muted); font-size: 1rem;
-      padding: .25rem; line-height: 1;
-    }
-    .drag-handle:active { cursor: grabbing; }
-    .sortable-list .dynamic-item { padding-left: 2rem; }
-    .sortable-ghost {
-      opacity: .4; border-color: var(--accent) !important;
-    }
-    .sortable-chosen {
-      box-shadow: 0 4px 16px rgba(16,185,129,.2);
-    }
-    /* TOAST */
-    .toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; }
-    .toast-msg {
-      background: var(--bg-card); border: 1px solid var(--accent);
-      color: var(--text); padding: .75rem 1.25rem; border-radius: 8px;
-      margin-top: .5rem; font-size: .875rem;
-      box-shadow: 0 4px 12px rgba(0,0,0,.3);
-      animation: slideIn .3s ease;
-    }
-    .toast-msg.error { border-color: var(--danger); }
-    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    /* PROJECT LIST ITEMS */
-    .project-list-item {
-      display: flex; align-items: center; gap: 12px;
-      padding: 12px 14px; margin-bottom: 8px;
-      background: var(--bg-dark); border: 1px solid var(--border);
-      border-radius: 10px; transition: border-color .2s;
-    }
-    .project-list-item:hover { border-color: var(--accent); }
-    .project-list-item .drag-handle { cursor: grab; color: var(--text-muted); font-size: 1.1rem; flex-shrink: 0; }
-    .project-list-item .proj-info { flex: 1; min-width: 0; }
-    .project-list-item .proj-title { font-weight: 600; color: #fff; font-size: .95rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .project-list-item .proj-desc { font-size: .78rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .project-list-item .proj-status { flex-shrink: 0; padding: 3px 10px; border-radius: 50px; font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
-    .project-list-item .proj-status.completed { background: rgba(16,185,129,.15); color: var(--accent); }
-    .project-list-item .proj-status.ongoing { background: rgba(245,158,11,.15); color: #f59e0b; }
-    .project-list-item .proj-actions { display: flex; gap: 6px; flex-shrink: 0; }
-    .project-list-item .proj-actions .btn { padding: 4px 8px; font-size: .78rem; }
-    .setting-row {
-      background: var(--bg-input); border: 1px solid var(--border);
-      border-radius: 8px; padding: 1rem; margin-bottom: .75rem;
-    }
-    .setting-row .form-check-input {
-      background-color: var(--bg-dark); border-color: var(--border);
-    }
-    .setting-row .form-check-input:checked {
-      background-color: var(--accent); border-color: var(--accent);
-    }
-    .image-control {
-      background: var(--bg-input); border: 1px solid var(--border);
-      border-radius: 8px; padding: 1rem;
-    }
-    .image-preview {
-      width: 100%; min-height: 120px; max-height: 220px;
-      object-fit: cover; background: var(--bg-dark);
-      border: 1px solid var(--border); border-radius: 8px;
-      display: none;
-    }
-    .image-preview.visible { display: block; }
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: .75rem;
-    }
-    .metric-card {
-      background: var(--bg-input); border: 1px solid var(--border);
-      border-radius: 8px; padding: .9rem;
-    }
-    .metric-card .metric-value {
-      display: block; font-size: 1.35rem; font-weight: 700; color: #fff;
-    }
-    .metric-card .metric-label {
-      color: var(--text-muted); font-size: .74rem; text-transform: uppercase; letter-spacing: .5px;
-    }
-    .subscription-toolbar {
-      display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; justify-content: space-between;
-    }
-    .subscription-list-item {
-      display: grid; grid-template-columns: 1fr auto auto; gap: .8rem; align-items: center;
-      background: var(--bg-dark); border: 1px solid var(--border); border-radius: 10px;
-      padding: 12px 14px; margin-bottom: 8px;
-    }
-    .subscription-title {
-      color: #fff; font-weight: 700; margin-bottom: 2px;
-    }
-    .subscription-meta {
-      color: var(--text-muted); font-size: .78rem;
-    }
-    .subscription-status {
-      border-radius: 50px; padding: 4px 10px; font-size: .7rem;
-      font-weight: 700; text-transform: uppercase; letter-spacing: .45px;
-      white-space: nowrap;
-    }
-    .subscription-status.active { color: var(--accent); background: rgba(16,185,129,.15); }
-    .subscription-status.due-soon { color: #f59e0b; background: rgba(245,158,11,.15); }
-    .subscription-status.due-week, .subscription-status.expired { color: var(--danger); background: rgba(239,68,68,.15); }
-    .subscription-status.paused, .subscription-status.cancelled, .subscription-status.archived { color: var(--text-muted); background: rgba(100,116,139,.15); }
-    .subscription-actions {
-      display: flex; gap: .35rem; align-items: center;
-    }
-    .subscription-actions .btn { padding: 4px 8px; font-size: .78rem; }
-    .reminder-row {
-      background: var(--bg-input); border: 1px solid var(--border);
-      border-radius: 8px; padding: .85rem; margin-bottom: .65rem;
-    }
-    /* SECTION PANELS */
-    .section-panel { display: none; }
-    .section-panel.active { display: block; }
-    /* RESPONSIVE */
-    @media (max-width: 768px) {
-      .sidebar { width: 60px; }
-      .sidebar .brand h2, .sidebar .brand small, .sidebar-nav li a span { display: none; }
-      .sidebar-nav li a { justify-content: center; padding: .75rem; }
-      .main-content { margin-left: 60px; }
-      .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .subscription-list-item { grid-template-columns: 1fr; }
-      .subscription-actions { justify-content: flex-start; }
-    }
-  </style>
+  <link href="assets/css/admin.css" rel="stylesheet">
 </head>
 <body>
 
@@ -274,19 +34,23 @@
   <!-- DASHBOARD -->
   <div id="dashboard" class="dashboard">
     <!-- Sidebar -->
-    <nav class="sidebar">
+    <button id="sidebar-backdrop" class="sidebar-backdrop" aria-label="Close navigation"></button>
+    <nav class="sidebar" id="admin-navigation" aria-label="Admin navigation">
       <div class="brand">
         <h2><i class="bi bi-gear-fill"></i> Admin</h2>
         <small>Portfolio Manager</small>
       </div>
       <ul class="sidebar-nav">
-        <li><a href="#" class="active" data-section="profile"><i class="bi bi-person"></i> <span>Profile</span></a></li>
+        <li><a href="#overview" class="active" data-section="overview"><i class="bi bi-grid-1x2"></i> <span>Overview</span></a></li>
+        <li><a href="#profile" data-section="profile"><i class="bi bi-person"></i> <span>Profile</span></a></li>
         <li><a href="#" data-section="skills"><i class="bi bi-bar-chart"></i> <span>Skills</span></a></li>
         <li><a href="#" data-section="interests"><i class="bi bi-heart"></i> <span>Interests</span></a></li>
         <li><a href="#" data-section="resume"><i class="bi bi-file-earmark-text"></i> <span>Resume</span></a></li>
         <li><a href="#" data-section="contact"><i class="bi bi-envelope"></i> <span>Contact</span></a></li>
         <li><a href="#" data-section="projects"><i class="bi bi-kanban"></i> <span>Projects</span></a></li>
         <li><a href="#" data-section="subscriptions"><i class="bi bi-calendar2-check"></i> <span>Subscriptions</span></a></li>
+        <li><a href="#media" data-section="media"><i class="bi bi-images"></i> <span>Media Library</span></a></li>
+        <li><a href="#recovery" data-section="recovery"><i class="bi bi-clock-history"></i> <span>Recovery</span></a></li>
         <li><a href="#" data-section="settings"><i class="bi bi-sliders"></i> <span>Settings</span></a></li>
       </ul>
     </nav>
@@ -294,13 +58,57 @@
     <!-- Main Content -->
     <div class="main-content">
       <div class="topbar">
-        <h1 id="section-title">Profile</h1>
-        <button class="btn btn-outline-danger" id="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
+        <div class="topbar-main">
+          <div class="title-group">
+            <button type="button" class="btn btn-outline-accent icon-button mobile-menu" id="menu-toggle" aria-label="Open navigation" aria-controls="admin-navigation" aria-expanded="false"><i class="bi bi-list"></i></button>
+            <h1 id="section-title" tabindex="-1">Overview</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="btn btn-outline-accent" id="preview-btn" title="Preview draft" aria-label="Preview draft"><i class="bi bi-eye"></i> <span class="button-label">Preview</span></button>
+            <a class="btn btn-outline-accent" href="/" target="_blank" rel="noopener" title="Open public site" aria-label="Open public site"><i class="bi bi-box-arrow-up-right"></i> <span class="button-label">Public site</span></a>
+            <button class="btn btn-outline-accent icon-button" id="logout-btn" title="Sign out" aria-label="Sign out"><i class="bi bi-box-arrow-right"></i></button>
+          </div>
+        </div>
+        <div class="workspace-status" id="workspace-status" hidden>
+          <span id="save-status" class="save-status" role="status" aria-live="polite"></span>
+          <div class="toolbar-actions">
+            <button class="btn btn-outline-accent icon-button" id="reload-section" title="Reload latest saved version" aria-label="Reload latest saved version"><i class="bi bi-arrow-clockwise"></i></button>
+            <button class="btn btn-outline-accent" id="discard-changes"><i class="bi bi-arrow-counterclockwise"></i> Discard</button>
+            <button class="btn btn-accent" id="save-current" disabled><i class="bi bi-check2"></i> <span>Publish changes</span></button>
+          </div>
+        </div>
       </div>
 
       <div class="section-panels-wrap">
+      <div id="workspace-errors" class="workspace-errors" role="alert" hidden></div>
+      <div id="draft-banner" class="draft-banner" hidden>
+        <span id="draft-message"></span>
+        <div class="toolbar-actions"><button class="btn btn-outline-accent" id="resume-draft"><i class="bi bi-pencil"></i> Resume draft</button><button class="btn btn-outline-danger icon-button" id="delete-draft" aria-label="Discard stored draft" title="Discard stored draft"><i class="bi bi-trash"></i></button></div>
+      </div>
+      <div class="section-panel active" id="panel-overview">
+        <div class="dashboard-identity"><img id="dashboard-avatar" src="assets/img/me-0.png" alt=""><div><h2 id="dashboard-name">Your portfolio</h2><p id="dashboard-date"></p></div></div>
+        <div class="metrics-grid overview-metrics" id="overview-metrics"></div>
+        <div class="dashboard-grid">
+          <div>
+            <section class="workspace-section"><h2><i class="bi bi-exclamation-circle"></i> Needs attention</h2><div id="overview-issues"></div></section>
+            <section class="workspace-section"><h2><i class="bi bi-calendar2-check"></i> Upcoming renewals</h2><div id="overview-renewals"></div></section>
+          </div>
+          <div>
+            <section class="workspace-section"><h2><i class="bi bi-activity"></i> System status</h2><div id="overview-health"></div><button class="btn btn-outline-accent mt-3" id="check-links"><i class="bi bi-link-45deg"></i> Check saved links</button><p class="muted mt-2" id="link-check-status"></p></section>
+            <section class="workspace-section"><h2><i class="bi bi-clock-history"></i> Recent activity</h2><div id="overview-activity"></div></section>
+          </div>
+        </div>
+      </div>
+      <div class="section-panel" id="panel-media">
+        <div class="toolbar"><input id="media-search" type="search" class="form-control search-control" aria-label="Search media" placeholder="Search images..."><div class="toolbar-actions"><label class="form-check"><input class="form-check-input" type="checkbox" id="media-unused"> Unused only</label><button class="btn btn-outline-accent" id="media-upload-btn"><i class="bi bi-upload"></i> Upload image</button><input id="media-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div></div>
+        <div id="media-grid" class="media-grid"></div>
+      </div>
+      <div class="section-panel" id="panel-recovery">
+        <div class="toolbar"><select id="recovery-filter" class="form-select search-control" aria-label="Filter revision history"><option value="">All sections</option></select><div class="toolbar-actions"><button class="btn btn-outline-accent" id="create-backup"><i class="bi bi-camera"></i> Create snapshot</button><a href="/api/admin/backup/export" class="btn btn-outline-accent" download><i class="bi bi-download"></i> Export backup</a></div></div>
+        <div id="recovery-list"></div>
+      </div>
       <!-- ===== PROFILE SECTION ===== -->
-      <div class="section-panel active" id="panel-profile">
+      <div class="section-panel" id="panel-profile">
         <div class="editor-card">
           <h3><i class="bi bi-person-badge"></i> Basic Information</h3>
           <div class="row g-3">
@@ -317,8 +125,8 @@
               <textarea class="form-control" id="p-tagline" rows="2"></textarea>
             </div>
             <div class="col-12">
-              <label class="form-label">Profile Image Path</label>
-              <input type="text" class="form-control" id="p-profileImage">
+              <input type="hidden" id="p-profileImage">
+              <button class="btn btn-outline-accent" data-navigate="settings" data-settings-tab="media"><i class="bi bi-person-bounding-box"></i> Manage About photo</button>
             </div>
           </div>
         </div>
@@ -474,7 +282,7 @@
         <div class="editor-card">
           <h3><i class="bi bi-kanban"></i> Projects</h3>
           <div class="d-flex justify-content-between align-items-center mb-3">
-            <p style="font-size:.8rem; color:var(--text-muted); margin:0;">Drag to reorder. Click a project to edit.</p>
+            <input class="form-control search-control" type="search" id="project-search" placeholder="Search projects..." aria-label="Search projects">
             <button class="btn btn-outline-accent" data-action="createProject"><i class="bi bi-plus-lg"></i> New Project</button>
           </div>
           <div id="projects-list" class="sortable-list"></div>
@@ -519,11 +327,6 @@
                 </div>
               </div>
             </div>
-            <div class="col-12">
-              <div class="form-text">
-                Cron endpoint: <code>/api/cron/subscription-reminders</code>. Configure your scheduler with an Authorization bearer token matching <code>CRON_SECRET</code>.
-              </div>
-            </div>
           </div>
         </div>
 
@@ -542,7 +345,8 @@
               </select>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-              <button class="btn btn-outline-accent" data-action="runSubscriptionCheck"><i class="bi bi-bell"></i> Run Check</button>
+              <button class="btn btn-outline-accent" data-action="runSubscriptionCheck"><i class="bi bi-bell"></i> Send Due Reminders</button>
+              <button class="btn btn-outline-accent" data-action="previewSubscriptionCheck"><i class="bi bi-eye"></i> Check Due</button>
               <button class="btn btn-outline-accent" data-action="sendSubscriptionTest"><i class="bi bi-envelope-check"></i> Test Email</button>
               <button class="btn btn-outline-accent" data-action="createSubscription"><i class="bi bi-plus-lg"></i> New Subscription</button>
             </div>
@@ -692,8 +496,7 @@
               <input type="text" class="form-control" id="site-captcha-intro">
             </div>
             <div class="col-md-6">
-              <label class="form-label" for="site-captcha-question">Captcha Question</label>
-              <input type="text" class="form-control" id="site-captcha-question">
+              <input type="hidden" id="site-captcha-question">
             </div>
             <div class="col-md-6">
               <label class="form-label" for="site-captcha-error">Captcha Error</label>
@@ -880,7 +683,7 @@
           </div>
           <div class="modal-footer" style="border-top:1px solid var(--border); padding:1rem 1.5rem;">
             <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-accent" id="se-save-btn"><i class="bi bi-check-lg"></i> Save Subscription</button>
+            <button type="button" class="btn btn-accent" id="se-save-btn"><i class="bi bi-check-lg"></i> Apply to draft</button>
           </div>
         </div>
       </div>
@@ -969,7 +772,7 @@
           </div>
           <div class="modal-footer" style="border-top:1px solid var(--border); padding:1rem 1.5rem;">
             <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-accent" id="pe-save-btn"><i class="bi bi-check-lg"></i> Save Project</button>
+            <button type="button" class="btn btn-accent" id="pe-save-btn"><i class="bi bi-check-lg"></i> Apply to draft</button>
           </div>
         </div>
       </div>
@@ -979,7 +782,13 @@
   </div><!-- #dashboard -->
 
   <!-- Toast container -->
-  <div class="toast-container" id="toast-container"></div>
+  <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title"></h2><p id="confirm-message"></p><form method="dialog" class="dialog-actions"><button class="btn btn-outline-accent" value="cancel" autofocus>Cancel</button><button id="confirm-accept" class="btn btn-accent" value="confirm">Confirm</button></form></dialog>
+  <dialog id="preview-dialog" class="preview-dialog" aria-label="Portfolio draft preview"><div class="toolbar preview-toolbar"><strong>Draft preview</strong><div class="toolbar-actions"><button class="btn btn-outline-accent icon-button" id="preview-desktop" title="Desktop preview" aria-label="Desktop preview"><i class="bi bi-display"></i></button><button class="btn btn-outline-accent icon-button" id="preview-mobile" title="Mobile preview" aria-label="Mobile preview"><i class="bi bi-phone"></i></button><button class="btn btn-outline-accent icon-button" id="refresh-preview" title="Refresh preview" aria-label="Refresh preview"><i class="bi bi-arrow-clockwise"></i></button><button class="btn btn-outline-accent icon-button" data-close-dialog="preview-dialog" title="Close preview" aria-label="Close preview"><i class="bi bi-x-lg"></i></button></div></div><div class="preview-frame-wrap"><iframe id="public-preview" title="Public portfolio draft"></iframe></div></dialog>
+  <dialog id="icon-dialog" aria-labelledby="icon-title"><h2 id="icon-title">Choose icon</h2><input id="icon-search" type="search" class="form-control" aria-label="Search icons" placeholder="Search icons..."><div id="icon-options" class="icon-picker-grid"></div><div class="dialog-actions"><button class="btn btn-outline-accent" data-close-dialog="icon-dialog">Close</button></div></dialog>
+  <dialog id="revision-dialog" aria-labelledby="revision-title"><h2 id="revision-title">Revision</h2><pre id="revision-content" class="revision-content"></pre><div class="dialog-actions"><button class="btn btn-outline-accent" data-close-dialog="revision-dialog">Close</button><button class="btn btn-accent" id="restore-revision"><i class="bi bi-arrow-counterclockwise"></i> Restore revision</button></div></dialog>
+  <dialog id="media-picker-dialog" aria-labelledby="media-picker-title"><h2 id="media-picker-title">Choose image</h2><input id="media-picker-search" type="search" class="form-control" placeholder="Search images..." aria-label="Search image library"><div id="media-picker-grid" class="media-grid"></div><div class="dialog-actions"><button class="btn btn-outline-accent" data-close-dialog="media-picker-dialog">Close</button></div></dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>

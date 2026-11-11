@@ -18,6 +18,17 @@ let subscriptionsData = {
 };
 const sortableInstances = [];
 const siteSectionOrder = ['about', 'skills', 'interests', 'testimonials', 'resume', 'projects', 'contact'];
+let csrfToken = '';
+let dataLoaded = false;
+let activeSection = 'overview';
+let activeSettingsTab = 'site';
+const versions = {};
+const savedAt = {};
+const savedSnapshots = {};
+const savedRecords = {};
+const pendingSaves = new Set();
+const dirtyResources = new Set();
+const publicSections = ['profile', 'skills', 'interests', 'resume', 'contact', 'projects'];
 
 // ──────────────────────────────────────────
 // UTILITY
@@ -32,12 +43,31 @@ function showToast(msg, isError) {
 }
 
 async function apiCall(url, method, body) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
-  if (body) opts.body = JSON.stringify(body);
+  const resource = resourceFromUrl(url);
+  const opts = { method, headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken }, signal: AbortSignal.timeout(30000) };
+  if (method === 'PUT' && versions[resource]) opts.headers['If-Match'] = versions[resource];
+  if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  const data = await readResponse(res);
+  if (!res.ok) {
+    if (res.status === 401 && url !== '/api/admin/login') showLogin();
+    throw Object.assign(new Error(data.error || `Request failed (${res.status}).`), { status: res.status, fields: data.fields, code: data.code });
+  }
+  if (data.csrfToken) csrfToken = data.csrfToken;
+  if (resource && res.headers.get('x-data-version')) {
+    versions[resource] = res.headers.get('x-data-version');
+    savedAt[resource] = res.headers.get('x-saved-at');
+  }
   return data;
+}
+
+async function readResponse(res) {
+  if (!(res.headers.get('content-type') || '').includes('application/json')) throw new Error('The server returned an unexpected response. Please try again.');
+  return res.json();
+}
+
+function resourceFromUrl(url) {
+  return url.match(/^\/api\/admin\/(?:portfolio\/)?(profile|skills|interests|resume|contact|projects|settings|site|subscriptions)$/)?.[1];
 }
 
 async function uploadImage(file, type) {
@@ -45,13 +75,14 @@ async function uploadImage(file, type) {
   if (!file.type || !file.type.startsWith('image/')) {
     throw new Error('Only image files can be uploaded');
   }
+  if (file.size > 8 * 1024 * 1024) throw new Error('Images must be under 8 MB.');
 
   const res = await fetch(`/api/admin/uploads/${type}`, {
     method: 'POST',
-    headers: { 'Content-Type': file.type },
+    headers: { 'Content-Type': file.type, 'X-CSRF-Token': csrfToken },
     body: file,
   });
-  const data = await res.json();
+  const data = await readResponse(res);
   if (!res.ok) throw new Error(data.error || 'Upload failed');
   return data.path;
 }
@@ -59,8 +90,8 @@ async function uploadImage(file, type) {
 function setImagePreview(previewId, imagePath) {
   const preview = document.getElementById(previewId);
   if (!preview) return;
-  if (imagePath) {
-    preview.src = imagePath;
+  if (safeImagePath(imagePath)) {
+    preview.src = safeImagePath(imagePath);
     preview.classList.add('visible');
   } else {
     preview.removeAttribute('src');
@@ -75,35 +106,51 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
+  const button = e.target.querySelector('button[type=submit]');
+  button.disabled = true;
   try {
+    if (!csrfToken) await apiCall('/api/admin/check', 'GET');
     await apiCall('/api/admin/login', 'POST', {
       username: document.getElementById('login-username').value,
       password: document.getElementById('login-password').value,
     });
-    showDashboard();
+    document.getElementById('login-password').value = '';
+    await showDashboard();
   } catch (err) {
     errEl.textContent = err.message;
     errEl.style.display = 'block';
-  }
+  } finally { button.disabled = false; }
 });
 
 document.getElementById('logout-btn').addEventListener('click', async () => {
-  await apiCall('/api/admin/logout', 'POST');
+  if (anyDirty() && !await confirmAction('Sign out?', 'Unsaved changes will be discarded.', 'Sign out')) return;
+  try {
+    await apiCall('/api/admin/logout', 'POST');
+    [...publicSections, 'site'].forEach(clearStoredDraft);
+    dataLoaded = false;
+    Object.keys(savedSnapshots).forEach(key => delete savedSnapshots[key]);
+    showLogin();
+    await apiCall('/api/admin/check', 'GET');
+  } catch (error) { showToast(error.message, true); }
+});
+
+function showLogin() {
+  document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   document.getElementById('dashboard').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
-});
+}
 
 async function checkAuth() {
   try {
     const res = await apiCall('/api/admin/check', 'GET');
-    if (res.authenticated) showDashboard();
+    if (res.authenticated) await showDashboard();
   } catch (e) { /* not logged in */ }
 }
 
 async function showDashboard() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
-  await loadAllData();
+  if (!dataLoaded) await loadAllData();
 }
 
 // ──────────────────────────────────────────
@@ -112,24 +159,20 @@ async function showDashboard() {
 document.querySelectorAll('.sidebar-nav a').forEach(link => {
   link.addEventListener('click', (e) => {
     e.preventDefault();
-    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    link.classList.add('active');
-    const section = link.dataset.section;
-    document.getElementById('section-title').textContent =
-      section.charAt(0).toUpperCase() + section.slice(1);
-    document.querySelectorAll('.section-panel').forEach(p => p.classList.remove('active'));
-    document.getElementById('panel-' + section).classList.add('active');
+    navigateTo(link.dataset.section);
   });
 });
 
 // ──────────────────────────────────────────
 // EVENT DELEGATION (replaces all inline onclick/oninput)
 // ──────────────────────────────────────────
-document.addEventListener('click', (e) => {
+document.addEventListener('click', async (e) => {
   // Remove dynamic item buttons
   const removeBtn = e.target.closest('.remove-btn');
   if (removeBtn) {
+    if (!await confirmAction('Remove this entry?', 'The entry will be removed from your draft.', 'Remove')) return;
     removeBtn.closest('.dynamic-item').remove();
+    trackChanges();
     return;
   }
 
@@ -164,7 +207,9 @@ document.addEventListener('click', (e) => {
     case 'addSubscriptionReminder': addSubscriptionReminder(); break;
     case 'runSubscriptionCheck': runSubscriptionCheck(); break;
     case 'sendSubscriptionTest': sendSubscriptionTest(); break;
+    case 'previewSubscriptionCheck': previewSubscriptionCheck(); break;
   }
+  queueMicrotask(() => { enhanceFields(); trackChanges(); });
 });
 
 // Range slider live label updates (replaces oninput)
@@ -199,7 +244,7 @@ async function loadAllData() {
   try {
     const sections = ['profile', 'skills', 'interests', 'resume', 'contact', 'projects'];
     const results = await Promise.all([
-      ...sections.map(s => apiCall(`/api/portfolio/${s}`, 'GET')),
+      ...sections.map(s => apiCall(`/api/admin/portfolio/${s}`, 'GET')),
       apiCall('/api/admin/settings', 'GET'),
       apiCall('/api/admin/site', 'GET'),
       apiCall('/api/admin/subscriptions', 'GET'),
@@ -218,8 +263,20 @@ async function loadAllData() {
     populateSite(currentSite);
     populateSubscriptions(subscriptionsData);
     initSortable();
+    dataLoaded = true;
+    publicSections.forEach(section => savedRecords[section] = structuredClone(currentData[section]));
+    savedRecords.settings = structuredClone(currentSettings);
+    savedRecords.site = structuredClone(currentSite);
+    savedRecords.subscriptions = structuredClone(subscriptionsData);
+    [...publicSections, 'settings', 'site', 'subscriptions'].forEach(section => savedSnapshots[section] = JSON.stringify(collectResource(section)));
+    enhanceFields();
+    trackChanges();
+    await loadOverview().catch(error => showToast(error.message, true));
+    navigateTo(location.hash.slice(1) || 'overview', false);
   } catch (err) {
-    showToast('Error loading data: ' + err.message, true);
+    showErrors(new Error('Error loading data: ' + err.message), 'content');
+    const retry = document.createElement('button'); retry.className = 'btn btn-outline-accent mt-2'; retry.textContent = 'Retry loading';
+    retry.addEventListener('click', loadAllData); document.getElementById('workspace-errors').appendChild(retry);
   }
 }
 
@@ -372,7 +429,11 @@ function populateSubscriptions(data) {
 }
 
 function renderSubscriptionMetrics() {
-  const summary = subscriptionsData.summary || {};
+  const rows = (subscriptionsData.subscriptions || []).map(subscriptionView);
+  const summary = { total: rows.length, active: rows.filter(item => item.status === 'active').length,
+    due7: rows.filter(item => item.status === 'active' && item.daysLeft >= 0 && item.daysLeft <= 7).length,
+    due30: rows.filter(item => item.status === 'active' && item.daysLeft >= 0 && item.daysLeft <= 30).length,
+    expired: rows.filter(item => item.computedStatus === 'expired').length };
   document.getElementById('sub-metric-total').textContent = summary.total || 0;
   document.getElementById('sub-metric-active').textContent = summary.active || 0;
   document.getElementById('sub-metric-due7').textContent = summary.due7 || 0;
@@ -380,16 +441,24 @@ function renderSubscriptionMetrics() {
   document.getElementById('sub-metric-expired').textContent = summary.expired || 0;
 }
 
+function subscriptionView(item) {
+  const date = subscriptionsData.now?.date || new Date().toISOString().slice(0, 10);
+  const daysLeft = Math.round((Date.parse(item.renewalDate) - Date.parse(date)) / 86400000);
+  const computedStatus = item.status !== 'active' ? item.status : daysLeft < 0 ? 'expired' : daysLeft <= 7 ? 'due-week' : daysLeft <= 30 ? 'due-soon' : 'active';
+  return { ...item, daysLeft, computedStatus };
+}
+
 function renderSubscriptionsList() {
   const list = document.getElementById('subscriptions-list');
   if (!list) return;
+  renderSubscriptionMetrics();
   const search = (document.getElementById('sub-search')?.value || '').toLowerCase().trim();
   const statusFilter = document.getElementById('sub-status-filter')?.value || '';
   const subscriptions = subscriptionsData.subscriptions || [];
   list.innerHTML = '';
 
   const filtered = subscriptions
-    .map((subscription, index) => ({ subscription, index }))
+    .map((subscription, index) => ({ subscription: subscriptionView(subscription), index }))
     .filter(({ subscription }) => {
       const status = subscription.computedStatus || subscription.status || 'active';
       const statusMatch = !statusFilter || status === statusFilter || subscription.status === statusFilter;
@@ -442,6 +511,7 @@ function renderSubscriptionsList() {
       </div>`;
     list.appendChild(div);
   });
+  enhanceFields();
 }
 
 function subscriptionStatusLabel(status) {
@@ -468,7 +538,6 @@ function collectSubscriptionsPayload() {
       digest: document.getElementById('sub-digest').checked,
     },
     subscriptions: (subscriptionsData.subscriptions || []).map(stripSubscriptionComputedFields),
-    reminderHistory: subscriptionsData.reminderHistory || [],
   };
 }
 
@@ -480,16 +549,7 @@ function stripSubscriptionComputedFields(subscription) {
 }
 
 async function saveSubscriptions(showMessage = true) {
-  try {
-    const result = await apiCall('/api/admin/subscriptions', 'PUT', collectSubscriptionsPayload());
-    subscriptionsData = result.data || subscriptionsData;
-    populateSubscriptions(subscriptionsData);
-    if (showMessage) showToast('Subscriptions saved successfully!');
-    return true;
-  } catch (err) {
-    showToast('Error saving subscriptions: ' + err.message, true);
-    return false;
-  }
+  return saveResource('subscriptions', showMessage);
 }
 
 function openSubscriptionEditor(index) {
@@ -533,6 +593,7 @@ function openSubscriptionEditor(index) {
   if (!reminderList.children.length) addSubscriptionReminder();
 
   const modal = new bootstrap.Modal(document.getElementById('subscriptionEditorModal'));
+  rememberModal('subscriptionEditorModal');
   modal.show();
 }
 
@@ -614,33 +675,38 @@ async function saveSubscriptionFromModal() {
   }
   subscriptionsData.subscriptions = list;
 
-  const saved = await saveSubscriptions(false);
-  if (saved) {
-    bootstrap.Modal.getInstance(document.getElementById('subscriptionEditorModal')).hide();
-    showToast('Subscription saved successfully!');
-  }
+  document.getElementById('subscriptionEditorModal').dataset.committed = 'true';
+  bootstrap.Modal.getInstance(document.getElementById('subscriptionEditorModal')).hide();
+  renderSubscriptionsList();
+  trackChanges();
+  showToast('Subscription added to draft.');
 }
 
 async function deleteSubscription(index) {
   const list = subscriptionsData.subscriptions || [];
   if (index < 0 || index >= list.length) return;
-  if (!window.confirm(`Delete ${list[index].name || 'this subscription'}?`)) return;
+  if (!await confirmAction('Delete subscription?', `${list[index].name || 'This subscription'} will be removed when you save changes.`, 'Delete from draft')) return;
   list.splice(index, 1);
   subscriptionsData.subscriptions = list;
-  await saveSubscriptions(false);
-  showToast('Subscription deleted.');
+  renderSubscriptionsList();
+  trackChanges();
 }
 
 async function runSubscriptionCheck() {
   try {
-    const saved = await saveSubscriptions(false);
-    if (!saved) return;
+    if (isDirty('subscriptions')) return showToast('Save your subscription changes first.', true);
+    if (!await confirmAction('Send due reminders?', 'Emails will be sent to your saved reminder recipient.', 'Send reminders')) return;
     const result = await apiCall('/api/admin/subscriptions/reminders/run', 'POST', { dryRun: false });
     const message = result.sent
       ? result.message
       : `${result.message} (${result.count || 0} due)`;
     showToast(message);
-    await loadAllData();
+    const data = await apiCall('/api/admin/subscriptions', 'GET');
+    populateSubscriptions(data);
+    savedRecords.subscriptions = structuredClone(data);
+    savedSnapshots.subscriptions = JSON.stringify(collectSubscriptionsPayload());
+    trackChanges();
+    await loadOverview();
   } catch (err) {
     showToast('Reminder check failed: ' + err.message, true);
   }
@@ -649,6 +715,7 @@ async function runSubscriptionCheck() {
 async function sendSubscriptionTest() {
   try {
     const recipientEmail = document.getElementById('sub-recipient').value;
+    if (!await confirmAction('Send test email?', `A test reminder will be sent to ${recipientEmail || 'your saved recipient'}.`, 'Send test')) return;
     const result = await apiCall('/api/admin/subscriptions/test-email', 'POST', { recipientEmail });
     showToast(result.message || 'Test reminder email sent.');
   } catch (err) {
@@ -704,14 +771,7 @@ function collectSettings() {
 }
 
 async function saveSettings() {
-  try {
-    const result = await apiCall('/api/admin/settings', 'PUT', collectSettings());
-    currentSettings = result.settings || currentSettings;
-    populateSettings(currentSettings);
-    showToast('Settings saved successfully!');
-  } catch (err) {
-    showToast('Error saving settings: ' + err.message, true);
-  }
+  return saveResource('settings');
 }
 
 function populateSite(site) {
@@ -874,14 +934,7 @@ function collectSite() {
 }
 
 async function saveSite() {
-  try {
-    const result = await apiCall('/api/admin/site', 'PUT', collectSite());
-    currentSite = result.site || currentSite;
-    populateSite(currentSite);
-    showToast('Public site saved successfully!');
-  } catch (err) {
-    showToast('Error saving public site: ' + err.message, true);
-  }
+  return saveResource('site');
 }
 
 async function changePassword() {
@@ -916,6 +969,7 @@ async function uploadSettingImage(button) {
   try {
     const path = await uploadImage(fileInput.files[0], button.dataset.type);
     targetInput.value = path;
+    targetInput.dispatchEvent(new Event('input', { bubbles: true }));
     setImagePreview(previewId, path);
     fileInput.value = '';
     showToast('Image uploaded successfully!');
@@ -930,6 +984,7 @@ async function uploadProjectImage() {
   try {
     const path = await uploadImage(fileInput.files[0], 'project');
     targetInput.value = path;
+    targetInput.dispatchEvent(new Event('input', { bubbles: true }));
     setImagePreview('pe-image-preview', path);
     fileInput.value = '';
     showToast('Project image uploaded successfully!');
@@ -1039,7 +1094,7 @@ function addInterest(name, icon, color) {
       <div class="col-4">
         <label class="form-label">Color</label>
         <div class="d-flex gap-2">
-          <input type="color" class="form-control form-control-color" data-field="color" value="${color || '#ffbb2c'}" style="width:50px">
+          <input type="color" class="form-control form-control-color" data-field="color" value="${escHtml(color || '#ffbb2c')}" style="width:50px">
           <input type="text" class="form-control color-text-sync" value="${escHtml(color || '#ffbb2c')}" style="font-size:.8rem">
         </div>
       </div>
@@ -1193,31 +1248,14 @@ function collectResearchEntries() {
 // SAVE
 // ──────────────────────────────────────────
 async function saveSection(section) {
-  let data;
-  switch (section) {
-    case 'profile': data = collectProfile(); break;
-    case 'skills': data = collectSkills(); break;
-    case 'interests': data = collectInterests(); break;
-    case 'resume': data = collectResume(); break;
-    case 'contact': data = collectContact(); break;
-    case 'projects': data = collectProjects(); break;
-    default: return showToast('Unknown section', true);
-  }
-  try {
-    await apiCall(`/api/admin/portfolio/${section}`, 'PUT', data);
-    showToast(`${section.charAt(0).toUpperCase() + section.slice(1)} saved successfully!`);
-  } catch (err) {
-    showToast('Error: ' + err.message, true);
-  }
+  return saveResource(section);
 }
 
 // ──────────────────────────────────────────
 // HTML ESCAPE
 // ──────────────────────────────────────────
 function escHtml(str) {
-  const div = document.createElement('div');
-  div.appendChild(document.createTextNode(str));
-  return div.innerHTML;
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // ──────────────────────────────────────────
@@ -1240,6 +1278,7 @@ function renderProjectList() {
     const statusClass = (p.status || '').toLowerCase() === 'completed' ? 'completed' : 'ongoing';
     div.innerHTML = `
       <span class="drag-handle"><i class="bi bi-grip-vertical"></i></span>
+      ${safeImagePath(p.image) ? `<img class="project-thumb" src="${escHtml(safeImagePath(p.image))}" alt="" loading="lazy">` : '<div class="project-thumb d-flex align-items-center justify-content-center"><i class="bi bi-image"></i></div>'}
       <div class="proj-info">
         <div class="proj-title">${escHtml(p.title || 'Untitled')}</div>
         <div class="proj-desc">${escHtml(p.description || '')}</div>
@@ -1253,6 +1292,9 @@ function renderProjectList() {
   });
   // Re-init sortable for the new items
   initSortable();
+  filterProjects();
+  enhanceFields();
+  if (!projectsData.length) list.innerHTML = '<p class="empty-state">No projects yet.</p>';
 }
 
 function collectProjects() {
@@ -1261,12 +1303,7 @@ function collectProjects() {
 
 // Persist projects to the server
 async function persistProjects() {
-  try {
-    await apiCall('/api/admin/portfolio/projects', 'PUT', projectsData);
-    showToast('Projects saved successfully!');
-  } catch (err) {
-    showToast('Error saving projects: ' + err.message, true);
-  }
+  return saveResource('projects');
 }
 
 function openProjectEditor(index) {
@@ -1295,6 +1332,7 @@ function openProjectEditor(index) {
   document.getElementById('pe-client').value = d.client || '';
 
   const modal = new bootstrap.Modal(document.getElementById('projectEditorModal'));
+  rememberModal('projectEditorModal');
   modal.show();
 }
 
@@ -1329,43 +1367,19 @@ async function saveProjectFromModal() {
   }
 
   renderProjectList();
+  document.getElementById('projectEditorModal').dataset.committed = 'true';
   bootstrap.Modal.getInstance(document.getElementById('projectEditorModal')).hide();
-  await persistProjects();
+  trackChanges();
+  showToast('Project added to draft.');
 }
 
 async function deleteProject(index) {
   if (index < 0 || index >= projectsData.length) return;
+  if (!await confirmAction('Delete project?', `${projectsData[index].title} will be removed when you publish changes.`, 'Delete from draft')) return;
   projectsData.splice(index, 1);
   renderProjectList();
-  await persistProjects();
+  trackChanges();
 }
-
-// Confirm-delete: first click → show confirm, second click → delete
-document.addEventListener('click', (e) => {
-  const delBtn = e.target.closest('[data-action="deleteProject"]');
-  if (!delBtn) return;
-  e.stopPropagation();
-
-  if (delBtn.dataset.confirm === 'true') {
-    // Second click: actually delete
-    deleteProject(parseInt(delBtn.dataset.index));
-  } else {
-    // First click: show confirmation
-    delBtn.dataset.confirm = 'true';
-    delBtn.innerHTML = '<i class="bi bi-check-lg"></i> Sure?';
-    delBtn.classList.add('btn-danger');
-    delBtn.classList.remove('btn-outline-danger');
-    // Reset after 3 seconds if not clicked
-    setTimeout(() => {
-      if (delBtn.isConnected) {
-        delBtn.dataset.confirm = 'false';
-        delBtn.innerHTML = '<i class="bi bi-trash"></i>';
-        delBtn.classList.remove('btn-danger');
-        delBtn.classList.add('btn-outline-danger');
-      }
-    }, 3000);
-  }
-}, true); // capture phase to intercept before other handlers
 
 // Wire up the modal save button
 document.getElementById('se-save-btn').addEventListener('click', saveSubscriptionFromModal);
@@ -1402,15 +1416,544 @@ function initSortable() {
           items.forEach((item, i) => {
             item.querySelectorAll('[data-index]').forEach(btn => { btn.dataset.index = i; });
           });
-          persistProjects();
         }
+        trackChanges();
       },
     });
     sortableInstances.push(instance);
   });
 }
 
-// ──────────────────────────────────────────
-// INIT
-// ──────────────────────────────────────────
+// Workspace state stays alongside the existing editors and their collectors.
+function collectResource(section) {
+  const collectors = { profile: collectProfile, skills: collectSkills, interests: collectInterests, resume: collectResume, contact: collectContact, projects: collectProjects, settings: collectSettings, site: collectSite, subscriptions: collectSubscriptionsPayload };
+  return collectors[section]?.();
+}
+
+function populateResource(section, value) {
+  const populators = { profile: populateProfile, skills: populateSkills, interests: populateInterests, resume: populateResume, contact: populateContact, projects: populateProjects, settings: populateSettings, site: populateSite, subscriptions: populateSubscriptions };
+  if (publicSections.includes(section)) currentData[section] = value;
+  if (section === 'settings') currentSettings = value;
+  populators[section]?.(value);
+  enhanceFields();
+  initSortable();
+}
+
+function currentResource() {
+  if (activeSection === 'settings') return ['site', 'labels'].includes(activeSettingsTab) ? 'site' : ['media', 'email'].includes(activeSettingsTab) ? 'settings' : null;
+  return [...publicSections, 'subscriptions'].includes(activeSection) ? activeSection : null;
+}
+
+function isDirty(section) {
+  return dataLoaded && savedSnapshots[section] !== undefined && savedSnapshots[section] !== JSON.stringify(collectResource(section));
+}
+
+function anyDirty() { return Object.keys(savedSnapshots).some(isDirty); }
+
+function draftKey(section) { return `portfolio-draft-v1:${section}`; }
+function storedDraft(section) { try { return JSON.parse(sessionStorage.getItem(draftKey(section))); } catch { return null; } }
+function clearStoredDraft(section) { try { sessionStorage.removeItem(draftKey(section)); } catch { /* Storage can be disabled. */ } }
+
+function trackChanges() {
+  if (!dataLoaded) return;
+  for (const section of [...publicSections, 'site']) {
+    if (isDirty(section)) {
+      dirtyResources.add(section);
+      try { sessionStorage.setItem(draftKey(section), JSON.stringify({ data: collectResource(section), version: versions[section], at: new Date().toISOString() })); }
+      catch { /* In-memory editing still works when browser storage is full. */ }
+    } else if (dirtyResources.has(section)) {
+      dirtyResources.delete(section); clearStoredDraft(section);
+    }
+  }
+  document.querySelectorAll('.sidebar-nav a').forEach(link => {
+    const sections = link.dataset.section === 'settings' ? ['site', 'settings'] : [link.dataset.section];
+    link.classList.toggle('has-changes', sections.some(isDirty));
+  });
+  updateSaveStatus();
+}
+
+function updateSaveStatus() {
+  const resource = currentResource();
+  document.getElementById('workspace-status').hidden = !resource || !dataLoaded;
+  document.getElementById('draft-banner').hidden = true;
+  if (!resource || !dataLoaded) return;
+  const dirty = isDirty(resource);
+  const busy = pendingSaves.has(resource);
+  const status = document.getElementById('save-status');
+  status.classList.toggle('dirty', dirty);
+  status.textContent = busy ? 'Saving...' : dirty ? (storedDraft(resource) ? 'Unpublished draft saved in this tab' : 'Unsaved changes') : `Saved ${formatDate(savedAt[resource])}`;
+  document.getElementById('save-current').disabled = !dirty || busy;
+  document.getElementById('save-current').querySelector('span').textContent = ['settings', 'subscriptions'].includes(resource) ? 'Save changes' : 'Publish changes';
+  document.getElementById('discard-changes').disabled = !dirty || busy;
+  document.getElementById('reload-section').disabled = busy;
+  const draft = storedDraft(resource);
+  if (!dirty && draft && JSON.stringify(draft.data) !== savedSnapshots[resource]) {
+    document.getElementById('draft-banner').hidden = false;
+    document.getElementById('draft-message').textContent = `Draft available from ${formatDate(draft.at)}${draft.version !== versions[resource] ? ' (published content has changed)' : ''}`;
+  }
+}
+
+async function saveResource(section, showMessage = true) {
+  if (!dataLoaded || pendingSaves.has(section)) return false;
+  if (!isDirty(section)) return true;
+  pendingSaves.add(section);
+  const panel = document.getElementById(`panel-${['settings', 'site'].includes(section) ? 'settings' : section}`);
+  panel.inert = true;
+  panel.setAttribute('aria-busy', 'true');
+  clearErrors();
+  updateSaveStatus();
+  try {
+    const url = publicSections.includes(section) ? `/api/admin/portfolio/${section}` : `/api/admin/${section}`;
+    const result = await apiCall(url, 'PUT', collectResource(section));
+    const saved = result.data || result.settings || result.site;
+    savedRecords[section] = structuredClone(saved);
+    populateResource(section, saved);
+    savedSnapshots[section] = JSON.stringify(collectResource(section));
+    clearStoredDraft(section);
+    if (showMessage) showToast(['settings', 'subscriptions'].includes(section) ? 'Changes saved.' : 'Changes published.');
+    loadOverview().catch(error => showToast(error.message, true));
+    return true;
+  } catch (error) {
+    showErrors(error, section);
+    return false;
+  } finally {
+    panel.inert = false;
+    panel.removeAttribute('aria-busy');
+    pendingSaves.delete(section);
+    trackChanges();
+  }
+}
+
+function clearErrors() {
+  const errors = document.getElementById('workspace-errors');
+  errors.hidden = true;
+  errors.replaceChildren();
+  document.querySelectorAll('[aria-invalid=true]').forEach(input => input.removeAttribute('aria-invalid'));
+}
+
+function showErrors(error, section) {
+  const container = document.getElementById('workspace-errors');
+  container.hidden = false;
+  container.textContent = error.message;
+  if (error.fields?.length) {
+    const list = document.createElement('ul');
+    error.fields.slice(0, 20).forEach(field => {
+      const item = document.createElement('li');
+      item.textContent = `${field.path || section}: ${field.message}`;
+      list.appendChild(item);
+      const input = findValidationField(section, field.path);
+      if (input) input.setAttribute('aria-invalid', 'true');
+    });
+    container.appendChild(list);
+  }
+  container.scrollIntoView({ block: 'center' });
+}
+
+function findValidationField(section, fieldPath) {
+  const ids = {
+    profile: { name: 'p-name', fullName: 'p-fullName', tagline: 'p-tagline', aboutTitle: 'p-aboutTitle', aboutText: 'p-aboutText', profileImage: 'p-profileImage', 'meta.title': 'p-metaTitle', 'meta.description': 'p-metaDesc' },
+    settings: { 'email.host': 's-email-host', 'email.port': 's-email-port', 'email.user': 's-email-user', 'email.from': 's-email-from', 'email.to': 's-email-to', 'images.backgroundImage': 's-bg-image', 'images.profileImage': 's-profile-image', 'analytics.googleMeasurementId': 's-ga-id' },
+    subscriptions: { 'settings.recipientEmail': 'sub-recipient', 'settings.timezone': 'sub-timezone', 'settings.defaultReminderTime': 'sub-default-time' },
+  };
+  if (ids[section]?.[fieldPath]) return document.getElementById(ids[section][fieldPath]);
+  const parts = fieldPath.split('.');
+  const arrays = { 'profile.details': 'p-details-list', 'profile.socialLinks': 'p-social-list', 'contact.emails': 'c-emails-list', 'contact.phones': 'c-phones-list', 'contact.socialLinks': 'c-social-list', skills: 'skills-list', interests: 'interests-list' };
+  const collection = /^\d+$/.test(parts[0]) ? section : `${section}.${parts.shift()}`;
+  const list = document.getElementById(arrays[collection] || (collection.startsWith('resume.') ? `r-${collection.split('.')[1]}-list` : ''));
+  const item = list?.children[Number(parts[0])];
+  return item?.querySelector(`[data-field="${CSS.escape(parts[1] || '')}"]`);
+}
+
+function formatDate(value) {
+  if (!value || Number.isNaN(Date.parse(value))) return 'not yet';
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+}
+
+function safeImagePath(value) {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  try {
+    const url = new URL(value, location.origin);
+    return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : '';
+  } catch { return ''; }
+}
+
+function navigateTo(section, focus = true) {
+  if (!document.getElementById(`panel-${section}`)) section = 'overview';
+  activeSection = section;
+  document.querySelectorAll('.sidebar-nav a').forEach(link => {
+    const active = link.dataset.section === section;
+    link.classList.toggle('active', active);
+    if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+  });
+  document.querySelectorAll('.section-panel').forEach(panel => panel.classList.toggle('active', panel.id === `panel-${section}`));
+  document.getElementById('section-title').textContent = { overview: 'Overview', media: 'Media library', recovery: 'Recovery' }[section] || section[0].toUpperCase() + section.slice(1);
+  history.replaceState(null, '', `#${section}`);
+  setMenu(false);
+  if (focus) document.getElementById('section-title').focus({ preventScroll: true });
+  clearErrors();
+  updateSaveStatus();
+  if (section === 'media') loadMedia().catch(error => showToast(error.message, true));
+  if (section === 'recovery') loadRecovery().catch(error => showToast(error.message, true));
+  if (section === 'overview' && dataLoaded) loadOverview().catch(error => showToast(error.message, true));
+}
+
+function setMenu(open) {
+  document.getElementById('admin-navigation').classList.toggle('open', open);
+  document.getElementById('sidebar-backdrop').classList.toggle('open', open);
+  document.getElementById('menu-toggle').setAttribute('aria-expanded', String(open));
+  const mobile = matchMedia('(max-width: 767px)').matches;
+  document.getElementById('admin-navigation').inert = mobile && !open;
+  document.getElementById('admin-navigation').setAttribute('aria-hidden', String(mobile && !open));
+  document.querySelector('.main-content').inert = mobile && open;
+  if (open) document.querySelector('.sidebar-nav a.active')?.focus();
+}
+
+function confirmAction(title, message, label = 'Confirm') {
+  const dialog = document.getElementById('confirm-dialog');
+  if (dialog.open) return Promise.resolve(false);
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-message').textContent = message;
+  document.getElementById('confirm-accept').textContent = label;
+  dialog.returnValue = 'cancel';
+  dialog.showModal();
+  return new Promise(resolve => dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), { once: true }));
+}
+
+function modalValues(modal) {
+  return JSON.stringify(Array.from(modal.querySelectorAll('input:not([type=file]), textarea, select')).map(input => input.type === 'checkbox' ? input.checked : input.value));
+}
+
+function rememberModal(id) {
+  const modal = document.getElementById(id);
+  modal.dataset.baseline = modalValues(modal);
+  modal.dataset.committed = 'false';
+  enhanceFields();
+}
+
+function setupTabs(panel, groups, className, onSelect) {
+  const nav = document.createElement('div');
+  nav.className = className;
+  nav.setAttribute('role', 'tablist');
+  nav.setAttribute('aria-label', panel.id === 'panel-settings' ? 'Settings categories' : 'Resume categories');
+  panel.prepend(nav);
+  for (const [key, group] of Object.entries(groups)) {
+    const pane = document.createElement('div');
+    pane.id = `${panel.id}-${key}`;
+    pane.setAttribute('role', 'tabpanel');
+    const button = document.createElement('button');
+    button.type = 'button'; button.id = `${pane.id}-tab`; button.textContent = group.label;
+    button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', pane.id);
+    pane.setAttribute('aria-labelledby', button.id);
+    group.ids.forEach(id => { const card = document.getElementById(id)?.closest('.editor-card'); if (card) pane.appendChild(card); });
+    panel.appendChild(pane); nav.appendChild(button);
+    button.addEventListener('click', () => {
+      nav.querySelectorAll('button').forEach(tab => {
+        const selected = tab === button;
+        tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
+        document.getElementById(tab.getAttribute('aria-controls')).hidden = !selected;
+      });
+      onSelect?.(key);
+    });
+  }
+  nav.addEventListener('keydown', event => {
+    if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const tabs = [...nav.querySelectorAll('button')];
+    const index = tabs.indexOf(document.activeElement);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[next].click(); tabs[next].focus();
+  });
+  nav.querySelector('button').click();
+}
+
+function setupWorkspace() {
+  document.querySelectorAll('[data-action="save"], [data-action="saveSettings"], [data-action="saveSite"], [data-action="saveSubscriptions"]').forEach(button => button.classList.add('legacy-save'));
+  setupTabs(document.getElementById('panel-settings'), {
+    site: { label: 'Site', ids: ['site-nav-list', 'site-sections-list', 'site-testimonials-source'] },
+    media: { label: 'Images', ids: ['s-bg-image'] },
+    email: { label: 'Email', ids: ['s-email-host'] },
+    security: { label: 'Security', ids: ['s-current-password'] },
+    labels: { label: 'Public labels', ids: ['site-project-all', 'site-form-name'] },
+    automation: { label: 'Automation', ids: [] },
+  }, 'settings-tabs', key => { activeSettingsTab = key; updateSaveStatus(); });
+  const analytics = document.getElementById('s-ga-id').closest('.mt-3');
+  document.getElementById('panel-settings-media').appendChild(analytics);
+  document.getElementById('panel-settings-email').insertAdjacentHTML('beforeend', '<button class="btn btn-outline-accent" id="verify-email"><i class="bi bi-plug"></i> Verify saved connection</button><p id="smtp-status" class="muted mt-3"></p>');
+  document.getElementById('panel-settings-security').insertAdjacentHTML('beforeend', '<section class="workspace-section"><h2>Security activity</h2><div id="security-activity"></div></section>');
+  document.getElementById('panel-settings-automation').innerHTML = '<section class="workspace-section"><h2>Subscription reminders</h2><div id="automation-status"></div><button class="btn btn-outline-accent mt-3" data-navigate="subscriptions"><i class="bi bi-calendar2-check"></i> Manage reminders</button></section>';
+  setupTabs(document.getElementById('panel-resume'), {
+    summary: { label: 'Summary', ids: ['r-summaryName', 'r-aoiTitle'] }, experience: { label: 'Experience', ids: ['r-experience-list'] },
+    education: { label: 'Education', ids: ['r-education-list'] }, certifications: { label: 'Certifications', ids: ['r-certifications-list'] },
+    honors: { label: 'Honors', ids: ['r-honors-list'] }, research: { label: 'Research', ids: ['r-research-list'] },
+  }, 'resume-editor-tabs');
+  const search = document.createElement('input');
+  search.type = 'search'; search.id = 'resume-search'; search.className = 'form-control search-control mb-3'; search.placeholder = 'Search resume entries...'; search.setAttribute('aria-label', 'Search resume entries');
+  document.querySelector('.resume-editor-tabs').after(search);
+  [...publicSections, 'settings', 'site', 'subscriptions'].forEach(section => {
+    const option = document.createElement('option'); option.value = section; option.textContent = section[0].toUpperCase() + section.slice(1); document.getElementById('recovery-filter').appendChild(option);
+  });
+  for (const id of ['projectEditorModal', 'subscriptionEditorModal']) {
+    const modal = document.getElementById(id);
+    modal.addEventListener('hide.bs.modal', async event => {
+      if (modal.dataset.committed === 'true' || modal.dataset.baseline === modalValues(modal)) return;
+      event.preventDefault();
+      if (await confirmAction('Discard editor changes?', 'These changes have not been applied to your draft.', 'Discard')) {
+        modal.dataset.committed = 'true'; bootstrap.Modal.getInstance(modal).hide();
+      }
+    });
+  }
+}
+
+function filterProjects() {
+  const query = document.getElementById('project-search').value.toLowerCase().trim();
+  document.querySelectorAll('#projects-list .project-list-item').forEach(item => {
+    const project = projectsData[Number(item.dataset.index)];
+    item.hidden = ![project.title, project.description, project.category, ...(project.technologies || [])].join(' ').toLowerCase().includes(query);
+  });
+  const sortable = sortableInstances.find(instance => instance.el.id === 'projects-list');
+  sortable?.option('disabled', !!query);
+}
+
+function filterResume() {
+  const query = document.getElementById('resume-search').value.toLowerCase().trim();
+  document.querySelectorAll('#panel-resume .dynamic-item').forEach(item => {
+    item.hidden = ![...item.querySelectorAll('input,textarea')].some(input => input.value.toLowerCase().includes(query));
+  });
+  sortableInstances.filter(instance => instance.el.closest('#panel-resume')).forEach(instance => instance.option('disabled', !!query));
+}
+
+const iconNames = ['person', 'briefcase', 'code-slash', 'laptop', 'globe', 'github', 'linkedin', 'twitter', 'instagram', 'facebook', 'youtube', 'whatsapp', 'envelope', 'telephone', 'camera', 'music-note', 'book', 'palette', 'lightbulb', 'bar-chart', 'heart', 'cup-hot', 'controller', 'cpu', 'database', 'cloud', 'shield-check', 'mortarboard', 'trophy', 'tools', 'bicycle', 'compass', 'broadcast', 'phone', 'terminal', 'rocket-takeoff'];
+let iconTarget;
+function renderIconOptions() {
+  const query = document.getElementById('icon-search').value.toLowerCase();
+  const container = document.getElementById('icon-options'); container.replaceChildren();
+  iconNames.filter(name => name.includes(query)).forEach(name => {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-outline-accent'; button.title = name; button.setAttribute('aria-label', name); button.innerHTML = `<i class="bi bi-${name}" aria-hidden="true"></i>`;
+    button.addEventListener('click', () => { iconTarget.value = `bi bi-${name}`; iconTarget.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('icon-dialog').close(); });
+    container.appendChild(button);
+  });
+}
+
+let fieldId = 0;
+function enhanceFields() {
+  document.querySelectorAll('i').forEach(icon => icon.setAttribute('aria-hidden', 'true'));
+  document.querySelectorAll('#dashboard input, #dashboard textarea, #dashboard select').forEach(input => {
+    if (!input.id) input.id = `admin-field-${++fieldId}`;
+    if (!input.getAttribute('aria-label') && !document.querySelector(`label[for="${CSS.escape(input.id)}"]`)) {
+      const label = input.closest('.form-check')?.querySelector('label') || input.closest('[class*="col-"], .mb-3, .setting-row')?.querySelector('label');
+      if (label && !label.htmlFor) label.htmlFor = input.id;
+      if (!label || label.htmlFor !== input.id) input.setAttribute('aria-label', { 's-bg-file': 'Choose background image', 's-profile-file': 'Choose profile image' }[input.id] || input.dataset.field || input.placeholder || input.id);
+    }
+    if (input.dataset.field !== 'icon' || input.closest('.icon-input-wrap')) return;
+    const wrapper = document.createElement('div'); wrapper.className = 'icon-input-wrap'; input.before(wrapper); wrapper.appendChild(input);
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-outline-accent icon-button'; button.title = 'Choose icon'; button.setAttribute('aria-label', 'Choose icon'); button.innerHTML = '<i class="bi bi-grid-3x3-gap"></i>';
+    button.addEventListener('click', () => { iconTarget = input; document.getElementById('icon-search').value = ''; renderIconOptions(); document.getElementById('icon-dialog').showModal(); }); wrapper.appendChild(button);
+  });
+  document.querySelectorAll('.remove-btn').forEach(button => { button.title = 'Remove entry'; button.setAttribute('aria-label', 'Remove entry'); button.type = 'button'; });
+  document.querySelectorAll('button[title]:not([aria-label])').forEach(button => button.setAttribute('aria-label', button.title));
+  for (const id of ['s-bg-image', 's-profile-image', 'pe-image', 'site-testimonials-placeholder']) {
+    const input = document.getElementById(id);
+    if (input.dataset.pickerReady) continue;
+    input.dataset.pickerReady = 'true';
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-outline-accent my-2'; button.innerHTML = '<i class="bi bi-images" aria-hidden="true"></i> Browse library';
+    input.after(button);
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        await loadMedia(); mediaTarget = input;
+        document.getElementById('media-picker-search').value = ''; renderMediaPicker(); document.getElementById('media-picker-dialog').showModal();
+      } catch (error) { showToast(error.message, true); } finally { button.disabled = false; }
+    });
+  }
+}
+
+async function loadOverview() {
+  const data = await apiCall('/api/admin/dashboard', 'GET');
+  document.getElementById('dashboard-name').textContent = currentData.profile?.name || 'Your portfolio';
+  document.getElementById('dashboard-avatar').src = safeImagePath(currentSettings.images?.profileImage) || 'assets/img/me-0.png';
+  document.getElementById('dashboard-date').textContent = new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(new Date());
+  document.getElementById('overview-metrics').innerHTML = [[data.counts.projects || 0, 'Projects'], [data.counts.resume || 0, 'Resume entries'], [data.subscriptions.due30 || 0, 'Renewals in 30 days'], [data.issues.length, 'Needs attention']].map(([value, label]) => `<div class="metric-card"><span class="metric-value">${value}</span><span class="metric-label">${label}</span></div>`).join('');
+  document.getElementById('overview-issues').innerHTML = data.issues.length ? data.issues.map(issue => `<div class="issue-row"><i class="bi bi-exclamation-circle"></i><div>${escHtml(issue.message)}</div><button class="btn btn-outline-accent icon-button" data-navigate="${escHtml(issue.section)}" title="Review ${escHtml(issue.section)}" aria-label="Review ${escHtml(issue.section)}"><i class="bi bi-arrow-up-right"></i></button></div>`).join('') : '<p class="empty-state">No content issues found.</p>';
+  document.getElementById('overview-renewals').innerHTML = data.upcoming.length ? data.upcoming.map(item => `<div class="status-row"><div>${escHtml(item.name)}<div class="muted">${escHtml(item.provider)}</div></div><span>${escHtml(item.renewalDate)}<br>${item.daysLeft < 0 ? `${Math.abs(item.daysLeft)} days overdue` : `${item.daysLeft} days left`}</span></div>`).join('') : '<p class="empty-state">No active subscriptions.</p>';
+  const emailStatus = data.email.verified ? 'Connection verified' : data.email.configured ? 'Configured, not verified' : 'Needs configuration';
+  const statusRows = [['Email', emailStatus], ['Reminder scheduler', data.automation.configured ? 'Token configured' : 'Token missing'], ['Last reminder check', data.automation.lastRun ? `${formatDate(data.automation.lastRun)} (${data.automation.status})` : 'Never run'], ['Latest recovery point', data.latestRevision ? formatDate(data.latestRevision.createdAt) : 'No snapshots yet']];
+  document.getElementById('overview-health').innerHTML = statusRows.map(([label, value]) => `<div class="status-row"><span>${label}</span><span>${escHtml(value)}</span></div>`).join('');
+  const activity = data.activity.map(item => `<div class="activity-row"><div>${escHtml(item.action)}${item.detail ? `<div class="muted">${escHtml(item.detail)}</div>` : ''}</div><time datetime="${escHtml(item.at)}">${formatDate(item.at)}</time></div>`).join('') || '<p class="empty-state">No activity yet.</p>';
+  document.getElementById('overview-activity').innerHTML = data.activity.slice(0, 5).map(item => `<div class="activity-row"><div>${escHtml(item.action)}<div class="muted">${escHtml(item.detail)}</div></div><time>${formatDate(item.at)}</time></div>`).join('');
+  document.getElementById('security-activity').innerHTML = activity;
+  document.getElementById('smtp-status').textContent = emailStatus;
+  document.getElementById('automation-status').innerHTML = statusRows.slice(1, 3).map(([label, value]) => `<div class="status-row"><span>${label}</span><span>${escHtml(value)}</span></div>`).join('');
+  document.getElementById('link-check-status').textContent = data.links.checkedAt ? `Last checked ${formatDate(data.links.checkedAt)}` : 'Links not checked yet';
+}
+
+let mediaItems = [];
+let mediaTarget;
+function renderMediaPicker() {
+  const query = document.getElementById('media-picker-search').value.toLowerCase();
+  const container = document.getElementById('media-picker-grid'); container.replaceChildren();
+  mediaItems.filter(item => item.path.toLowerCase().includes(query)).forEach(item => {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'media-item btn btn-outline-accent'; button.setAttribute('aria-label', `Select ${item.name}`);
+    button.innerHTML = `<img src="/${escHtml(item.path)}" alt="" loading="lazy"><span class="media-name">${escHtml(item.name)}</span>`;
+    button.addEventListener('click', () => { mediaTarget.value = item.path; mediaTarget.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('media-picker-dialog').close(); });
+    container.appendChild(button);
+  });
+  if (!container.children.length) container.innerHTML = '<p class="empty-state">No uploaded images found.</p>';
+}
+async function loadMedia() { const data = await apiCall('/api/admin/media', 'GET'); mediaItems = data.files; renderMedia(); }
+function renderMedia() {
+  const query = document.getElementById('media-search').value.toLowerCase();
+  const unused = document.getElementById('media-unused').checked;
+  const visible = mediaItems.filter(item => item.path.toLowerCase().includes(query) && (!unused || !item.usedBy.length));
+  document.getElementById('media-grid').innerHTML = visible.map(item => `<article class="media-item"><img src="/${escHtml(item.path)}" alt="${escHtml(item.group)} image" loading="lazy"><div class="media-item-content"><p class="media-name">${escHtml(item.name)}</p><div class="media-meta">${Math.ceil(item.bytes / 1024)} KB | ${escHtml(item.group)}<br>${item.usedBy.length ? `Used in ${escHtml(item.usedBy.join(', '))}` : 'Unused'}</div><div class="toolbar-actions"><button class="btn btn-outline-accent" data-copy-image="${escHtml(item.path)}"><i class="bi bi-copy"></i> Copy path</button><button class="btn btn-outline-danger icon-button" data-delete-image="${escHtml(item.path)}" ${item.usedBy.length ? 'disabled' : ''} title="Delete unused image" aria-label="Delete unused image"><i class="bi bi-trash"></i></button></div></div></article>`).join('') || '<p class="empty-state">No images match this view.</p>';
+}
+
+let revisionItems = [];
+let selectedRevision;
+async function loadRecovery() { const data = await apiCall('/api/admin/revisions', 'GET'); revisionItems = data.revisions; renderRecovery(); }
+function renderRecovery() {
+  const filter = document.getElementById('recovery-filter').value;
+  document.getElementById('recovery-list').innerHTML = revisionItems.filter(item => !filter || item.section === filter).map(item => `<div class="revision-row"><div><strong>${escHtml(item.section)}</strong><div class="muted">${escHtml(item.reason)} | ${formatDate(item.createdAt)}</div></div><button class="btn btn-outline-accent" data-view-revision="${item.id}"><i class="bi bi-eye"></i> Review</button></div>`).join('') || '<p class="empty-state">No recovery points yet.</p>';
+}
+
+async function previewSubscriptionCheck() {
+  if (isDirty('subscriptions')) return showToast('Save your subscription changes first.', true);
+  try { const data = await apiCall('/api/admin/subscriptions/reminders/run', 'POST', { dryRun: true }); showToast(`${data.count} reminder(s) due. No email sent.`); }
+  catch (error) { showToast(error.message, true); }
+}
+
+function openPreview() {
+  if (!dataLoaded) return;
+  const hash = { profile: 'header', skills: 'about', interests: 'about', resume: 'resume', projects: 'projects', contact: 'contact' }[activeSection] || 'header';
+  document.getElementById('public-preview').src = `/?preview=1#${hash}`;
+  const dialog = document.getElementById('preview-dialog');
+  if (!dialog.open) dialog.showModal();
+}
+
+window.addEventListener('message', event => {
+  const iframe = document.getElementById('public-preview');
+  if (event.origin !== location.origin || event.source !== iframe.contentWindow || event.data?.type !== 'portfolio-preview-ready') return;
+  const payload = Object.fromEntries(publicSections.map(section => [section, collectResource(section)]));
+  payload.site = collectSite();
+  payload.settings = { images: collectSettings().images, analytics: {} };
+  iframe.contentWindow.postMessage({ type: 'portfolio-preview-data', payload }, location.origin);
+});
+
+document.addEventListener('input', event => {
+  if (event.target.id === 'project-search') return filterProjects();
+  if (event.target.id === 'resume-search') return filterResume();
+  if (event.target.id === 'media-search') return renderMedia();
+  if (event.target.id === 'media-picker-search') return renderMediaPicker();
+  if (event.target.id === 'icon-search') return renderIconOptions();
+  if (event.target.closest('#dashboard')) trackChanges();
+});
+document.addEventListener('change', event => {
+  if (event.target.id === 'media-unused') return renderMedia();
+  if (event.target.id === 'recovery-filter') return renderRecovery();
+  if (event.target.id === 'sub-status-filter') renderSubscriptionsList();
+  if (event.target.closest('#dashboard')) trackChanges();
+});
+document.addEventListener('click', async event => {
+  const close = event.target.closest('[data-close-dialog]');
+  if (close) document.getElementById(close.dataset.closeDialog).close();
+  const nav = event.target.closest('[data-navigate]');
+  if (nav) {
+    navigateTo(nav.dataset.navigate);
+    if (nav.dataset.settingsTab) document.getElementById(`panel-settings-${nav.dataset.settingsTab}-tab`)?.click();
+  }
+  const copy = event.target.closest('[data-copy-image]');
+  const remove = event.target.closest('[data-delete-image]');
+  const revision = event.target.closest('[data-view-revision]');
+  try {
+    if (copy) { await navigator.clipboard.writeText(copy.dataset.copyImage); showToast('Image path copied.'); }
+    if (remove && await confirmAction('Delete image?', 'This unused upload will be permanently removed.', 'Delete image')) {
+      await apiCall(`/api/admin/media/${remove.dataset.deleteImage.slice('assets/uploads/'.length)}`, 'DELETE'); await loadMedia();
+    }
+    if (revision) {
+      selectedRevision = await apiCall(`/api/admin/revisions/${revision.dataset.viewRevision}`, 'GET');
+      document.getElementById('revision-title').textContent = `${selectedRevision.section} - ${formatDate(selectedRevision.createdAt)}`;
+      document.getElementById('revision-content').textContent = JSON.stringify(selectedRevision.data, null, 2);
+      document.getElementById('revision-dialog').showModal();
+    }
+  } catch (error) { showToast(error.message, true); }
+});
+
+document.getElementById('menu-toggle').addEventListener('click', () => setMenu(!document.getElementById('admin-navigation').classList.contains('open')));
+document.getElementById('sidebar-backdrop').addEventListener('click', () => { setMenu(false); document.getElementById('menu-toggle').focus(); });
+document.addEventListener('keydown', event => { if (event.key === 'Escape') setMenu(false); });
+document.getElementById('save-current').addEventListener('click', () => saveResource(currentResource()));
+document.getElementById('discard-changes').addEventListener('click', async () => {
+  const resource = currentResource();
+  if (!resource || !await confirmAction('Discard changes?', 'Your draft will be replaced with the saved version.', 'Discard')) return;
+  populateResource(resource, structuredClone(savedRecords[resource])); clearStoredDraft(resource); clearErrors(); trackChanges();
+});
+document.getElementById('reload-section').addEventListener('click', async () => {
+  const resource = currentResource();
+  if (!resource || (isDirty(resource) && !await confirmAction('Load latest version?', 'Your current draft will be discarded. The latest saved content will be loaded.', 'Reload latest'))) return;
+  try {
+    const value = await apiCall(publicSections.includes(resource) ? `/api/admin/portfolio/${resource}` : `/api/admin/${resource}`, 'GET');
+    savedRecords[resource] = structuredClone(value);
+    populateResource(resource, value); savedSnapshots[resource] = JSON.stringify(collectResource(resource)); clearStoredDraft(resource); clearErrors(); trackChanges();
+  } catch (error) { showErrors(error, resource); }
+});
+document.getElementById('resume-draft').addEventListener('click', async () => {
+  const resource = currentResource(); const draft = storedDraft(resource); if (!draft) return;
+  if (draft.version !== versions[resource] && !await confirmAction('Resume older draft?', 'Published content has changed since this draft was created. Resuming accepts the draft as your new working copy.', 'Resume draft')) return;
+  populateResource(resource, draft.data); trackChanges();
+});
+document.getElementById('delete-draft').addEventListener('click', async () => {
+  if (await confirmAction('Discard stored draft?', 'This stored draft will be removed from this tab.', 'Discard draft')) { clearStoredDraft(currentResource()); updateSaveStatus(); }
+});
+document.getElementById('preview-btn').addEventListener('click', openPreview);
+document.getElementById('refresh-preview').addEventListener('click', openPreview);
+document.getElementById('preview-mobile').addEventListener('click', () => document.getElementById('public-preview').classList.add('mobile'));
+document.getElementById('preview-desktop').addEventListener('click', () => document.getElementById('public-preview').classList.remove('mobile'));
+document.getElementById('media-upload-btn').addEventListener('click', () => document.getElementById('media-file').click());
+document.getElementById('media-file').addEventListener('change', async event => {
+  const button = document.getElementById('media-upload-btn'); button.disabled = true;
+  try { await uploadImage(event.target.files[0], 'general'); event.target.value = ''; await loadMedia(); showToast('Image uploaded and optimized.'); }
+  catch (error) { showToast(error.message, true); } finally { button.disabled = false; }
+});
+document.getElementById('create-backup').addEventListener('click', async event => {
+  const button = event.currentTarget; button.disabled = true;
+  try { await apiCall('/api/admin/backups', 'POST'); await loadRecovery(); showToast('Recovery snapshot created.'); }
+  catch (error) { showToast(error.message, true); } finally { button.disabled = false; }
+});
+document.getElementById('check-links').addEventListener('click', async event => {
+  const button = event.currentTarget; button.disabled = true;
+  document.getElementById('link-check-status').textContent = 'Checking saved links...';
+  try {
+    const report = await apiCall('/api/admin/links/check', 'POST');
+    await loadOverview();
+    const unavailable = report.results.filter(item => item.status === null || item.status >= 400).length;
+    document.getElementById('link-check-status').textContent = `${report.results.length} links checked; ${unavailable} unavailable or restricted.`;
+  } catch (error) { showToast(error.message, true); document.getElementById('link-check-status').textContent = 'Link check failed.'; } finally { button.disabled = false; }
+});
+document.getElementById('restore-revision').addEventListener('click', async () => {
+  const revision = selectedRevision;
+  if (!revision || !await confirmAction('Restore this revision?', `Saved ${revision.section} content and its draft will be replaced. A recovery copy of the current content is created first.`, 'Restore revision')) return;
+  const button = document.getElementById('restore-revision'); button.disabled = true;
+  try {
+    const response = await fetch(`/api/admin/revisions/${revision.id}/restore`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken, 'If-Match': versions[revision.section] } });
+    const data = await readResponse(response); if (!response.ok) throw new Error(data.error);
+    const value = await apiCall(publicSections.includes(revision.section) ? `/api/admin/portfolio/${revision.section}` : `/api/admin/${revision.section}`, 'GET');
+    savedRecords[revision.section] = structuredClone(value);
+    populateResource(revision.section, value); savedSnapshots[revision.section] = JSON.stringify(collectResource(revision.section)); clearStoredDraft(revision.section);
+    document.getElementById('revision-dialog').close(); trackChanges(); await loadRecovery(); showToast('Revision restored.');
+  } catch (error) { showToast(error.message, true); } finally { button.disabled = false; }
+});
+window.addEventListener('beforeunload', event => {
+  const modalDirty = [...document.querySelectorAll('.modal.show')].some(modal => modal.dataset.baseline !== modalValues(modal));
+  if (anyDirty() || modalDirty) { event.preventDefault(); event.returnValue = ''; }
+});
+
+setupWorkspace();
+enhanceFields();
+setMenu(false);
+matchMedia('(max-width: 767px)').addEventListener('change', () => setMenu(false));
+document.getElementById('verify-email').addEventListener('click', async event => {
+  if (isDirty('settings')) return showToast('Save your email settings before verification.', true);
+  const button = event.currentTarget; button.disabled = true;
+  try { const result = await apiCall('/api/admin/settings/verify-email', 'POST'); showToast(result.message); await loadOverview(); }
+  catch (error) { showToast(error.message, true); } finally { button.disabled = false; }
+});
 checkAuth();

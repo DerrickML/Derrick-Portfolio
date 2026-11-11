@@ -15,8 +15,10 @@ Before deploying, decide or create:
 
 ## 2. Install Dependencies
 
+Install Node.js 20.9 or newer, then install on the target operating system (Sharp uses a platform-specific image processor).
+
 ```bash
-npm install
+npm ci
 ```
 
 ## 3. Generate Local Data And Env Files
@@ -66,6 +68,8 @@ data/secrets.json
 
 These are local/private because `data/` is gitignored. The subscription data shape is documented in `docs/subscriptions.example.json`.
 
+The app also creates private session storage, recovery revisions, activity, and diagnostic files as needed. Their contents and backup requirements are documented in [Admin Operations](admin.md#runtime-files). New files use owner-only permissions where the operating system supports them.
+
 ## 5. Configure `.env`
 
 At minimum, configure:
@@ -83,6 +87,8 @@ EMAIL_PORT=465
 EMAIL_TO=you@example.com
 CRON_SECRET=long_random_value
 ```
+
+Use `NODE_ENV=development` when opening the app over plain localhost HTTP. Production requires HTTPS for the secure admin session cookie. Configure a random session secret of at least 32 characters. Optional `DATA_DIR` and `UPLOADS_DIR` overrides support mounted storage; private data must remain outside `public/`.
 
 Generate a bcrypt hash manually:
 
@@ -109,6 +115,8 @@ Then configure:
 - Settings: SMTP, images, public labels, analytics.
 - Subscriptions: renewal entries, reminder recipient, timezone, reminder schedule.
 
+Use Preview to check public drafts, then Publish changes. Verify the saved SMTP connection in Settings > Email; send a test message separately when ready. Create a recovery snapshot and export a backup after initial configuration. See [Admin Operations](admin.md) for publishing and recovery.
+
 ## 7. Configure Reminder Cron
 
 The app owns the reminder logic. A scheduler only calls:
@@ -126,6 +134,8 @@ Linux crontab example:
 
 Cloudflare Worker setup is documented in `workers/README.md`.
 
+Run one app process per data directory. Confirm that Overview's last reminder check advances after your scheduler calls the app. Merely configuring `CRON_SECRET` does not install a scheduler.
+
 ## 8. Rebuild Local Data From Defaults
 
 For a clean local reset only:
@@ -135,3 +145,5 @@ node scripts/setup-data.js --force
 ```
 
 This rewrites `data/*.json`, so do not use it on production data unless you have a backup.
+
+For recovery from an exported backup, use `npm run restore:backup -- backup.json new-directory` instead. It validates the bundle and restores into a new directory without overwriting current data. Credentials require a separate secure backup.

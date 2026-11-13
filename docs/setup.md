@@ -147,3 +147,26 @@ node scripts/setup-data.js --force
 This rewrites `data/*.json`, so do not use it on production data unless you have a backup.
 
 For recovery from an exported backup, use `npm run restore:backup -- backup.json new-directory` instead. It validates the bundle and restores into a new directory without overwriting current data. Credentials require a separate secure backup.
+
+## 9. Deploy Or Update On cPanel
+
+For Passenger-based **Setup Node.js App** or **Application Manager** hosting:
+
+1. Back up the existing `.env`, `data/`, and uploads. Git intentionally does not contain your live data or secrets. Do not delete these directories or run setup with `--force` during an update.
+2. Deploy the complete repository into the configured application root, not just `public/`. The root must contain `server.js`, `package.json`, `package-lock.json`, and `lib/`. Set the startup file to `server.js`.
+3. Select Node.js 20.9 or newer. Use the app's **Run NPM Install** action to install the updated dependencies in the hosting environment. Sharp needs its Linux platform package; do not upload Windows `node_modules`. If using Terminal, activate the Node environment shown by cPanel before installing packages.
+4. Preserve the production environment settings, including a random `SESSION_SECRET` of at least 32 characters. The application user must be able to write the private data directory and uploads. Keep private data outside the public document root. Run `npm run setup` only when missing defaults need to be created; existing files are preserved.
+5. Restart the Node application after deploying code and installing dependencies. Updating files alone can serve new frontend JavaScript while the old backend is still in memory. For Passenger Application Manager, updating `tmp/restart.txt` in the application root triggers a restart on the next request, as described in [cPanel's restart guide](https://support.cpanel.net/hc/en-us/articles/1500002443862-How-to-restart-an-application-that-s-using-cPanel-s-Application-Manager).
+6. Reload the admin page and sign in again. Clear any cached admin JavaScript, and exclude `/api/admin/*` from proxy/CDN caching.
+
+Passenger loads the startup file with `require()`. The server therefore starts when Passenger is detected as well as when invoked directly with `node server.js`; ordinary test imports do not start a listener. See [Passenger's application loader](https://github.com/phusion/passenger/blob/stable-6.0/src/helper-scripts/node-loader.js).
+
+### Diagnose Admin Loading Errors
+
+The admin now reads editable content from `/api/admin/portfolio/:section`, not the public `/api/portfolio/:section` route, so it can receive version headers for safe saves. This does not require rewriting existing content JSON files.
+
+- `GET /api/admin/check` should return JSON with `authenticated` and a session-bound `csrfToken`. Do not share the token or your session cookie.
+- Without signing in, `GET /api/admin/portfolio/profile` should return `401` JSON. After signing in, it should return `200` JSON with `X-Data-Version` and `X-Saved-At` headers.
+- An HTML `404` saying `Cannot GET /api/admin/portfolio/profile`, especially when the auth check lacks `csrfToken`, indicates an older backend or a request reaching the wrong application. Check the application root, deployed `server.js`, and restart status before editing data files.
+- HTML `502` or `503` responses usually require checking Passenger/application logs for startup errors, missing dependencies, an unsupported Node version, or filesystem permissions.
+- A JSON error reading a section points to its file or permissions in `DATA_DIR`. Preserve existing files and inspect the application log; do not reset the entire data directory.

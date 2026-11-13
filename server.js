@@ -1568,7 +1568,8 @@ app.use((error, req, res, next) => {
     adminError(res, error, 'The request could not be completed.');
 });
 
-if (require.main === module) app.listen(PORT, () => {
+// Passenger imports the startup file instead of running it as Node's main module.
+if (require.main === module || globalThis.PhusionPassenger) app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
 

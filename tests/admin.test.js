@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 const bcrypt = require('bcryptjs');
 const sharp = require('sharp');
 const nodemailer = require('nodemailer');
@@ -93,6 +94,22 @@ after(async () => {
     mock.restoreAll();
     assert.ok(path.resolve(root).startsWith(path.join(os.tmpdir(), 'portfolio-admin-test-')));
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+});
+
+test('startup listens under Passenger but normal test imports do not bind a port', () => {
+    for (const passenger of [false, true]) {
+        const result = spawnSync(process.execPath, ['-e', `
+            const http = require('node:http');
+            let listens = 0;
+            http.Server.prototype.listen = function () { listens++; return this; };
+            ${passenger ? 'globalThis.PhusionPassenger = {};' : ''}
+            require(${JSON.stringify(require.resolve('../server'))});
+            if (listens !== ${passenger ? 1 : 0}) throw new Error('Unexpected startup listen count: ' + listens);
+            process.exit(0);
+        `], { env: process.env, encoding: 'utf8', timeout: 10000 });
+        assert.equal(result.error, undefined);
+        assert.equal(result.status, 0, result.stderr);
+    }
 });
 
 test('private endpoints require authentication and never expose runtime files', async () => {

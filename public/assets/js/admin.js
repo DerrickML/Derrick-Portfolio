@@ -62,8 +62,23 @@ async function apiCall(url, method, body) {
 }
 
 async function readResponse(res) {
-  if (!(res.headers.get('content-type') || '').includes('application/json')) throw new Error('The server returned an unexpected response. Please try again.');
-  return res.json();
+  const endpoint = new URL(res.url || location.href).pathname;
+  const contentType = res.headers.get('content-type') || 'unknown content type';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    const hint = res.status === 404
+      ? 'Confirm that the latest Node.js backend is deployed and restarted.'
+      : 'Check the Node.js application log and hosting proxy.';
+    throw Object.assign(new Error(`${endpoint} returned HTTP ${res.status} (${contentType}) instead of JSON. ${hint}`), {
+      status: res.status, endpoint, code: 'UNEXPECTED_RESPONSE',
+    });
+  }
+  try {
+    return await res.json();
+  } catch {
+    throw Object.assign(new Error(`${endpoint} returned invalid JSON (HTTP ${res.status}). Check the Node.js application log.`), {
+      status: res.status, endpoint, code: 'INVALID_JSON',
+    });
+  }
 }
 
 function resourceFromUrl(url) {

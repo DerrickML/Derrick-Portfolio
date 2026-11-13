@@ -6,6 +6,45 @@ const vm = require('node:vm');
 
 const root = process.env.PORTFOLIO_ROOT || path.resolve(__dirname, '..');
 
+function adminResponseReader() {
+  const stopInitialization = new Error('Skip admin DOM initialization.');
+  const context = vm.createContext({
+    URL, location: { href: 'https://example.test/admin.html' },
+    document: { getElementById() { throw stopInitialization; } },
+  });
+  const filename = path.join(root, 'public', 'assets', 'js', 'admin.js');
+  // Function declarations are available before the first DOM event is registered.
+  assert.throws(() => vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename }), error => error === stopInitialization);
+  return context.readResponse;
+}
+
+test('admin non-JSON errors identify the failed endpoint without exposing its query or response body', async () => {
+  const readResponse = adminResponseReader();
+  for (const status of [404, 503]) {
+    const response = new Response('<html>private diagnostic details</html>', { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    Object.defineProperty(response, 'url', { value: 'https://example.test/api/admin/portfolio/profile?token=private-token' });
+    await assert.rejects(() => readResponse(response), error => {
+      assert.equal(error.status, status);
+      assert.equal(error.code, 'UNEXPECTED_RESPONSE');
+      assert.equal(error.endpoint, '/api/admin/portfolio/profile');
+      assert.ok(error.message.includes(`HTTP ${status}`));
+      assert.ok(error.message.includes('/api/admin/portfolio/profile'));
+      assert.equal(error.message.includes('private'), false);
+      if (status === 404) assert.match(error.message, /backend is deployed and restarted/);
+      return true;
+    });
+  }
+});
+
+test('admin responses preserve valid JSON and distinguish malformed JSON from HTML errors', async () => {
+  const readResponse = adminResponseReader();
+  const data = { error: 'Please log in again.', fields: [] };
+  assert.deepEqual(await readResponse(new Response(JSON.stringify(data), { status: 401, headers: { 'Content-Type': 'application/json' } })), data);
+  const invalid = new Response('{broken', { headers: { 'Content-Type': 'application/json' } });
+  Object.defineProperty(invalid, 'url', { value: 'https://example.test/api/admin/settings' });
+  await assert.rejects(() => readResponse(invalid), error => error.code === 'INVALID_JSON' && error.endpoint === '/api/admin/settings' && error.status === 200);
+});
+
 // Deliberately small DOM: only the public scripts' observable output is modeled.
 function element(tag = 'div') {
   let text = '';
